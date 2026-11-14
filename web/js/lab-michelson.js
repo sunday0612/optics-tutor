@@ -49,20 +49,21 @@ const MI = (() => {
           <div class="tip">按住按钮转动微动鼓轮，也可以左右拖动刻度条；键盘 ← → 每次转 1 格（按住 Shift 转 10 格）。</div>
         </div>
       </div>`});
-    init(); $('#'+P+'-tx').value=s.tx; $('#'+P+'-ty').value=s.ty;
+    init(); LabStore.restore(P,s); stats.records+=s.rows.length; $('#'+P+'-review').innerHTML=paras(s.review||''); $('#'+P+'-tx').value=s.tx; $('#'+P+'-ty').value=s.ty;
     B=benchArea(P, Models3D.michelson, ()=>{ const p=parts(s.R); return {gap:gap(), tx:s.tx, ty:s.ty, fine:p.f, coarse:(s.R-p.main)*100, screen:$('#'+P+'-screen')}; },
       {cap3d:'三维模型（M₁ 的位移已放大显示）'});
     B.onChange=render;
     const setView=v=>{ s.view=v; if (v==='fringe' && tilt()<0.06) s.aligned=true; $('#'+P+'-v1').classList.toggle('active',v==='spots'); $('#'+P+'-v2').classList.toggle('active',v==='fringe'); render(); };
     $('#'+P+'-v1').onclick=()=>setView('spots');
     $('#'+P+'-v2').onclick=()=>setView('fringe');
+    $('#'+P+'-v1').classList.toggle('active',s.view==='spots'); $('#'+P+'-v2').classList.toggle('active',s.view==='fringe');
     ['tx','ty'].forEach(k=>$('#'+P+'-'+k).addEventListener('input',e=>{ s[k]=parseFloat(e.target.value); if (tilt()<0.06) s.aligned=true; render(); }));
     $('#'+P+'-assist').onchange=render;
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-drum'), 8, d=>{ turn(d); render(); });
     $('#'+P+'-rec').onclick=record;
-    $('#'+P+'-undo').onclick=()=>{ s.rows.pop(); if(!s.rows.length){ s.M0=null; s.reversals=0; } stats.records=Math.max(0,stats.records-1); table(); render(); };
-    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.M0=null; s.reversals=0; s.checked=false; $('#'+P+'-review').innerHTML=''; table(); render(); };
+    $('#'+P+'-undo').onclick=()=>{ s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; if(!s.rows.pop()) return; if(!s.rows.length){ s.M0=null; s.reversals=0; } stats.records=Math.max(0,stats.records-1); table(); render(); };
+    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.M0=null; s.reversals=0; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; table(); render(); };
     $('#'+P+'-check').onclick=review;
     table();
   }
@@ -133,21 +134,24 @@ const MI = (() => {
 
   /* ---------- 数据 ---------- */
   function record(){
+    if(s.rows.length>=500){ alert('已达 500 条记录，请清空后开始新实验。'); return; }
     if (s.view!=='fringe' || tilt()>=0.06){ $('#'+P+'-result').innerHTML='<div class="note">还看不到清晰的干涉条纹，先完成第 1、2 步。</div>'; return; }
     if (s.M0==null) s.M0=s.M;
     const n=Math.abs(rings()), N=Math.floor(n+1e-9), est=Math.round(rnd(-1.4,1.4))*1e-5;   // est：最后一位估读误差
     s.rows.push({N, R:+(s.R+est).toFixed(5), dm:gap(), frac:+(n-N).toFixed(2)});
-    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length}); table(); render();
+    s.checked=false; s.review=''; $('#'+P+'-review').innerHTML='';
+    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row:s.rows[s.rows.length-1]}); table(); render();
   }
   function calc(){
     const r=s.rows, n=r.length; if (n<4) return null;
     const k=Math.floor(n/2), items=[];
     for (let i=0;i<k;i++){ const dN=Math.abs(r[i+k].N-r[i].N), dd=Math.abs(r[i+k].R-r[i].R); items.push({i,k,dN,dd,lam:dN?2*dd/dN*1e6:NaN}); }
-    const ok=items.filter(x=>isFinite(x.lam)); if (!ok.length) return null;
+    const ok=items.filter(x=>Number.isFinite(x.lam)&&x.lam>0); if (ok.length!==items.length) return null;
     const mean=ok.reduce((a,b)=>a+b.lam,0)/ok.length;
     return {items,mean,err:(mean-632.8)/632.8*100,unused:n%2===1};
   }
   function table(){
+    LabStore.save(P,s);
     const r=s.rows; renderStats();
     if (!r.length){ $('#'+P+'-table').innerHTML='<div class="empty">还没有数据。看到条纹后，先点一次“记录读数”作为起点（N = 0）。</div>'; $('#'+P+'-result').innerHTML=''; return; }
     $('#'+P+'-table').innerHTML=`<table class="data"><tr><th>序号</th><th>累计环数 N</th><th>读数 d / mm</th><th>与上次间隔</th></tr>`+
@@ -156,7 +160,7 @@ const MI = (() => {
     $('#'+P+'-result').innerHTML = c ? `<div class="result">逐差法（第 i 组与第 i+${c.items[0].k} 组相减）：${c.items.map(x=>x.lam.toFixed(1)).join('、')} nm
         <div>平均波长 <span class="big">${c.mean.toFixed(1)} nm</span>　标准值 632.8 nm　相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(2)}%</b></div>
         ${c.unused?'<div class="hint">数据为奇数组，最后一组没有参与逐差。</div>':''}</div>`
-      : '<div class="hint" style="margin-top:8px">至少记录 4 组数据后，自动用逐差法计算波长。</div>';
+      : '<div class="hint" style="margin-top:8px">需要至少 4 组有效数据；配对的环数差和位移必须非零，重复记录请撤销后重测。</div>';
   }
 
   /* ---------- AI 批改 ---------- */
@@ -176,7 +180,7 @@ const MI = (() => {
   function review(){
     const c=calc();
     runReview(P,{
-      check:()=>c?'':'至少记录 4 组数据后才能检查。',
+      check:()=>c?'':'需要至少 4 组有效数据，且每组逐差的环数差和位移均非零；请撤销重复读数后重测。',
       prompt:()=>`你是大学物理实验课的助教，正在批改大一学生“迈克尔逊干涉仪测 He-Ne 激光波长”的实验数据。标准值 632.8 nm。
 学生的记录（N 为从第一次记录起中心累计冒出或缩进的环数，d 为 M₁ 位置读数，单位 mm）：
 ${s.rows.map((x,i)=>`${i+1}. N=${x.N}, d=${x.R.toFixed(5)}`).join('\n')}
@@ -184,7 +188,7 @@ ${s.rows.map((x,i)=>`${i+1}. N=${x.N}, d=${x.R.toFixed(5)}`).join('\n')}
 系统记录的操作情况：测量过程中反转鼓轮 ${s.reversals} 次（反转会引入回程差）；每次点击记录时，环已经多变化了 ${s.rows.map(x=>x.frac).join(', ')} 个（理想为 0，越大说明记录越晚）。${c.unused?'数据为奇数组，最后一组未参与逐差。':''}
 请给出批改意见：中文，200~300 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。要指出具体是第几组数据有问题、可能是什么原因。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
-    }).then(ok=>{ if(ok){ s.checked=true; render(); } });
+    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; LabStore.save(P,s); render(); } });
   }
   return {mount, render, key};
 })();

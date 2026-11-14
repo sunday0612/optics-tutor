@@ -1,7 +1,14 @@
 config.json
+default_config.json
+.env
 data/
 __pycache__/
+*.pyc
 build/
 dist/
+dist-fixed/
+*.log
+usage_log.jsonl
+lab_sessions.json
 *.spec
 .DS_Store

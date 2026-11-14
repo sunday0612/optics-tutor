@@ -173,7 +173,7 @@ function render(){ if ($('#view-sim').hidden) return; renderPattern(); renderCur
 function buildTabs(){
   $('#tabs').innerHTML = Object.entries(EXP).map(([k,e])=>`<button class="tab${k===state.exp?' active':''}" data-k="${k}">${e.name}</button>`).join('');
 }
-$('#tabs').addEventListener('click', e=>{ const b=e.target.closest('.tab'); if(!b) return; state.exp=b.dataset.k; buildTabs(); buildControls(); render(); });
+$('#tabs').addEventListener('click', e=>{ if(askBusy) return; const b=e.target.closest('.tab'); if(!b) return; state.exp=b.dataset.k; buildTabs(); buildControls(); render(); $('#explain').innerHTML=paras(PRINCIPLE[state.exp]); showQuiz(QUIZ[state.exp]); });
 function buildControls(){
   const e=EXP[state.exp], p=cur();
   $('#controls').innerHTML = Object.entries(e.params).map(([k,d])=>`
@@ -181,7 +181,7 @@ function buildControls(){
     <input type="range" data-k="${k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${p[k]}"></label>`).join('');
 }
 $('#controls').addEventListener('input', e=>{
-  const k=e.target.dataset.k; if(!k) return; const d=EXP[state.exp].params[k];
+  if(askBusy) return; const k=e.target.dataset.k; if(!k) return; const d=EXP[state.exp].params[k];
   cur()[k]=parseFloat(e.target.value); $('#o-'+k).innerHTML=`${fmtParam(d,cur()[k])}<small>${d.unit}</small>`; render();
 });
 $('#controls').addEventListener('change', e=>{ stats.adjust++; renderStats(); logEvent('adjust',{exp:state.exp,param:e.target.dataset.k}); });
@@ -209,12 +209,29 @@ function showExplain(q, before, res, note){
   const paras=String(res.explanation||'').replace(/\*\*/g,'').split(/\n+/).filter(Boolean).map(s=>`<p>${esc(s)}</p>`).join('');
   $('#explain').innerHTML = `<div class="qline">${esc(q)}</div>` + (diffs.length?`<div class="diffs">${diffs.map(s=>`<span class="diff">${esc(s)}</span>`).join('')}</div>`:'') + paras + (note?`<div class="note">${esc(note)}</div>`:'');
 }
+function normalizeQuiz(qz){
+  if(!qz || !Array.isArray(qz.options) || qz.options.length!==4 ||
+      !qz.options.every(x=>typeof x==='string' && x.trim()) || typeof qz.question!=='string' || !qz.question.trim()) return null;
+  const answer=typeof qz.answer==='string' && /^[0-3]$/.test(qz.answer)?Number(qz.answer):qz.answer;
+  if(!Number.isInteger(answer) || answer<0 || answer>=qz.options.length) return null;
+  return {...qz,answer};
+}
+function validateResult(res){
+  if(!res || Array.isArray(res) || !Object.hasOwn(EXP,res.experiment) ||
+     typeof res.explanation!=='string' || !res.explanation.trim() ||
+     !res.params || typeof res.params!=='object' || Array.isArray(res.params)) throw Error('AI 返回格式不完整');
+  for(const [k,v] of Object.entries(res.params)) {
+    if(!Object.hasOwn(EXP[res.experiment].params,k) || typeof v!=='number' || !Number.isFinite(v)) throw Error('AI 返回参数无效');
+  }
+  return {...res,quiz:normalizeQuiz(res.quiz)||QUIZ[res.experiment]};
+}
 function showQuiz(qz){
-  if (!qz || !Array.isArray(qz.options) || qz.options.length<2 || !(qz.answer>=0 && qz.answer<qz.options.length)) qz=QUIZ[state.exp];
+  qz=normalizeQuiz(qz)||QUIZ[state.exp];
+  const quizExp=state.exp;
   const box=$('#quiz');
   box.innerHTML = `<div>${esc(qz.question)}</div>` + qz.options.map((o,i)=>`<button class="opt" data-i="${i}">${'ABCD'[i]||i+1}. ${esc(o)}</button>`).join('') + '<div id="why"></div>';
   box.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>{
-    const i=+b.dataset.i, ok=i===qz.answer; stats.quiz++; if(ok) stats.right++; logEvent('quiz',{exp:state.exp,correct:ok});
+    const i=+b.dataset.i, ok=i===qz.answer; stats.quiz++; if(ok) stats.right++; logEvent('quiz',{exp:quizExp,correct:ok});
     box.querySelectorAll('.opt').forEach((x,j)=>{ x.disabled=true; if(j===qz.answer) x.classList.add('ok'); else if(j===i) x.classList.add('bad'); });
     $('#why').innerHTML=`<div class="why"><b style="color:${ok?'var(--ok)':'var(--bad)'}">${ok?'答对了！':'再想想。'}</b>${esc(qz.why||'')}</div>`;
     renderStats();
@@ -283,28 +300,35 @@ function offlineAnswer(q){
   return {experiment:exp, params:ps, explanation:PRINCIPLE[exp]+'\n'+line, quiz:QUIZ[exp]};
 }
 
+let askBusy=false;
 async function onAsk(){
+  if(askBusy) return;
   const q=$('#q').value.trim(); if(!q) return;
+  askBusy=true;
+  const controls=[...document.querySelectorAll('#tabs button, #controls input, #chips button')];
+  controls.forEach(x=>x.disabled=true);
+  try {
   stats.ask++; renderStats();
   const btn=$('#ask'); btn.disabled=true; btn.textContent='AI 思考中…';
   $('#explain').innerHTML=`<div class="qline">${esc(q)}</div>`+loadingHTML('正在选实验、设参数、写讲解…');
   const before={exp:state.exp, all:JSON.parse(JSON.stringify(state.p))};
   await AI.ready;
   let res=null, note='';
-  if (AI.online()){ try { res=await aiJSON(buildPrompt(q)); if (!res || typeof res!=='object') throw new Error('AI 返回格式不对'); } catch(e){ res=null; note=aiErrorNote(e); } }
+  if (AI.online()){ try { res=validateResult(await aiJSON(buildPrompt(q))); } catch(e){ res=null; note=aiErrorNote(e); } }
   else note='离线演示模式：讲解来自内置模板，只能识别常见的数值和关键词。';
   const by = res ? AI.label() : '';
   if (!res) res=offlineAnswer(q);
   applyResult(res); showExplain(q,before,res,note); showQuiz(res.quiz);
   if (by) $('#explain').insertAdjacentHTML('beforeend',`<div class="hint">由 ${esc(by)} 生成</div>`);
   logEvent('ask',{q, exp:state.exp, ai:!!by});
-  btn.disabled=false; btn.textContent='生成图样并讲解';
+  } catch(e){ $('#explain').textContent='处理失败：'+e.message; }
+  finally { askBusy=false; controls.forEach(x=>x.disabled=false); $('#ask').disabled=false; $('#ask').textContent='生成图样并讲解'; }
 }
 $('#ask').addEventListener('click', onAsk);
 $('#q').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); onAsk(); } });
 
 const EXAMPLES=['双缝间距 0.2mm，波长换成 450nm，条纹会怎么变？','单缝变窄，中央明纹为什么反而变宽？','光栅缝数从 5 增加到 15 会怎样？','牛顿环中心为什么是暗的？','两个偏振片夹角 60° 时还剩多少光？'];
 $('#chips').innerHTML = '<span class="hint">也可以试试这些问题：</span>' + EXAMPLES.map(s=>`<button class="chip">${esc(s)}</button>`).join('');
-$('#chips').addEventListener('click', e=>{ const b=e.target.closest('.chip'); if(!b) return; $('#q').value=b.textContent; onAsk(); });
+$('#chips').addEventListener('click', e=>{ if(askBusy) return; const b=e.target.closest('.chip'); if(!b) return; $('#q').value=b.textContent; onAsk(); });
 
 

@@ -41,19 +41,20 @@ const SP = (() => {
           <div class="tip">按住按钮转动望远镜，也可以拖动刻度条；键盘 ← → 每次 1′（Shift 为 10′）。</div>
         </div>
       </div>`});
-    init(); $('#'+P+'-i').value=s.i;
+    init(); LabStore.restore(P,s); stats.records+=s.rows.length; $('#'+P+'-review').innerHTML=paras(s.review||''); $('#'+P+'-i').value=s.i;
     B=benchArea(P, Models3D.spectrometer, ()=>({T:s.T, Tz:s.Tz, i:s.i, left:left(), lineT, view:s.view}), {cap3d:'三维模型（光栅转角已放大显示）'});
     B.onChange=render;
     const setView=v=>{ s.view=v; $('#'+P+'-v1').classList.toggle('active',v==='auto'); $('#'+P+'-v2').classList.toggle('active',v==='spec'); render(); };
     $('#'+P+'-v1').onclick=()=>setView('auto');
     $('#'+P+'-v2').onclick=()=>setView('spec');
+    $('#'+P+'-v1').classList.toggle('active',s.view==='auto'); $('#'+P+'-v2').classList.toggle('active',s.view==='spec');
     $('#'+P+'-i').addEventListener('input',e=>{ s.i=parseFloat(e.target.value); if (Math.abs(s.i)<0.05) s.aligned=true; render(); });
     $('#'+P+'-assist').onchange=render;
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-dial'), 6, d=>{ turn(d/60); render(); });
     $('#'+P+'-rec').onclick=record;
-    $('#'+P+'-undo').onclick=()=>{ if (s.rows.pop()) stats.records--; table(); render(); };
-    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.checked=false; $('#'+P+'-review').innerHTML=''; table(); render(); };
+    $('#'+P+'-undo').onclick=()=>{ s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; if (s.rows.pop()) stats.records--; table(); render(); };
+    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; table(); render(); };
     $('#'+P+'-check').onclick=review;
     table();
   }
@@ -129,20 +130,23 @@ const SP = (() => {
     if (!s.aligned||!s.zero||s.view!=='spec'){ $('#'+P+'-result').innerHTML='<div class="note">先完成第 1、2 步，并切到“看光谱”视图再记录。</div>'; return; }
     const t=lineT(next.k,GREEN);
     s.rows.push({...next, L:roundMin(left()), R:roundMin(right()), off:+((s.T-t)*60).toFixed(1)});
-    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length}); table(); render();
+    s.checked=false; s.review=''; $('#'+P+'-review').innerHTML='';
+    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row:s.rows[s.rows.length-1]}); table(); render();
   }
   function groups(){
     const g={}; s.rows.forEach(r=>{ (g[r.n]=g[r.n]||{})[r.k]=r; });
     return Object.keys(g).map(Number).sort().map(n=>{ const a=g[n][1], b=g[n][-1]; if (!a||!b) return {n,a,b};
       const pL=angDiff(a.L,b.L)/2, pR=angDiff(a.R,b.R)/2, phi=(pL+pR)/2;
-      return {n,a,b,pL,pR,phi,d:GREEN/sinD(phi),cross:Math.abs(a.R-b.R)>180}; });
+      return {n,a,b,pL,pR,phi,d:phi>0?GREEN/sinD(phi):null,cross:Math.abs(a.R-b.R)>180}; });
   }
   function calc(){
-    const gs=groups(), ok=gs.filter(x=>x.phi!=null); if (!ok.length) return {gs,ok};
+    const gs=groups(), ok=gs.filter(x=>Number.isFinite(x.d)&&x.d>0); if (!ok.length) return {gs,ok};
+    if(gs.some(x=>x.a&&x.b&&x.d==null)) return {gs,ok:[]};
     const mean=ok.reduce((a,b)=>a+b.d,0)/ok.length;
     return {gs,ok,mean,err:(mean-D_TRUE)/D_TRUE*100};
   }
   function table(){
+    LabStore.save(P,s);
     renderStats();
     if (!s.rows.length){ $('#'+P+'-table').innerHTML='<div class="empty">还没有数据。完成调节后，对准 +1 级绿线开始记录。</div>'; $('#'+P+'-result').innerHTML=''; return; }
     const c=calc();
@@ -151,7 +155,7 @@ const SP = (() => {
     $('#'+P+'-result').innerHTML = c.ok.length ? `<div class="result">各次光栅常数：${c.ok.map(x=>x.d.toFixed(1)).join('、')} nm
         <div>平均 d = <span class="big">${c.mean.toFixed(1)} nm</span>（约 ${(1e6/c.mean).toFixed(1)} 线/mm）　标称 1666.7 nm（600 线/mm）　相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(2)}%</b></div>
         ${c.ok.some(x=>x.cross)?'<div class="hint">有右游标读数跨过了 0°，计算夹角时已自动加 360°。</div>':''}</div>`
-      : '<div class="hint" style="margin-top:8px">同一次的 +1 级和 −1 级都记录后，自动计算 φ 和 d。</div>';
+      : '<div class="hint" style="margin-top:8px">需要 +1、−1 级的有效读数。角度差为零时无法计算，请撤销重复记录并重新对准谱线。</div>';
   }
 
   /* ---------- AI 批改 ---------- */
@@ -171,7 +175,7 @@ const SP = (() => {
   function review(){
     const c=calc();
     runReview(P,{
-      check:()=>c.ok.length?'':'至少完成一次 +1 级和 −1 级的记录后才能检查。',
+      check:()=>c.ok.length?'':'需要至少一组有效的 +1、−1 级读数，且所有完整组的角度差均非零。',
       prompt:()=>`你是大学物理实验课的助教，正在批改大一学生“分光计测光栅常数”的实验数据。汞灯绿线 λ = 546.1 nm，光栅标称 600 线/mm（d = 1666.7 nm）。φ = ¼(|θ₁−θ₁′|+|θ₂−θ₂′|)，d = λ/sinφ。
 学生的记录（θ₁、θ₂ 为左右游标读数）：
 ${c.gs.map(x=>`第 ${x.n} 次：+1 级 θ₁=${x.a?dms(x.a.L):'未记'} θ₂=${x.a?dms(x.a.R):'未记'}；−1 级 θ₁′=${x.b?dms(x.b.L):'未记'} θ₂′=${x.b?dms(x.b.R):'未记'}${x.phi!=null?`；φ=${dms(x.phi)}，d=${x.d.toFixed(1)} nm（只用左游标 φ=${(x.pL).toFixed(4)}°，只用右游标 φ=${(x.pR).toFixed(4)}°）`:''}`).join('\n')}
@@ -179,7 +183,7 @@ ${c.gs.map(x=>`第 ${x.n} 次：+1 级 θ₁=${x.a?dms(x.a.L):'未记'} θ₂=${
 系统记录的操作情况：每次记录时竖直叉丝偏离绿线中心的角度（′，偏离超过 20′ 说明对准的可能是别的谱线）：${s.rows.map(r=>`第${r.n}次${r.k>0?'+1':'−1'}级:${r.off}`).join('，')}；当前光栅与入射光垂直度偏差 ${s.i.toFixed(2)}°。
 请给出批改意见：中文，200~300 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。可以顺带解释为什么要读两个游标。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
-    }).then(ok=>{ if(ok){ s.checked=true; render(); } });
+    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; LabStore.save(P,s); render(); } });
   }
   return {mount, render, key};
 })();

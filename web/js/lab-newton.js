@@ -47,7 +47,7 @@ const NR = (() => {
           <div class="tip">按住按钮转动测微鼓轮（1 格 = 0.01 mm），也可以拖动刻度条；键盘 ← → 每次 1 格（Shift 为 10 格）。</div>
         </div>
       </div>`});
-    init();
+    init(); LabStore.restore(P,s); stats.records+=s.rows.length; $('#'+P+'-review').innerHTML=paras(s.review||'');
     B=benchArea(P, Models3D.newton, ()=>({dx:s.A-s.Xc, y0:s.y0, drum:((s.X*100)%100+100)%100, focus:s.focus}),
       {cap3d:'三维模型（显微镜和装置的移动量已放大显示）'});
     B.onChange=render;
@@ -59,8 +59,8 @@ const NR = (() => {
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-drum'), 8, d=>{ turn(d); render(); });
     $('#'+P+'-rec').onclick=record;
-    $('#'+P+'-undo').onclick=()=>{ if (s.rows.pop()) stats.records--; if(!s.rows.length) s.reversals=0; table(); render(); };
-    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.reversals=0; s.checked=false; $('#'+P+'-review').innerHTML=''; table(); render(); };
+    $('#'+P+'-undo').onclick=()=>{ s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; if (s.rows.pop()) stats.records--; if(!s.rows.length) s.reversals=0; table(); render(); };
+    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.reversals=0; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; table(); render(); };
     $('#'+P+'-check').onclick=review;
     table();
   }
@@ -124,7 +124,8 @@ const NR = (() => {
     if (!s.focused||!s.centered){ $('#'+P+'-result').innerHTML='<div class="note">先完成调焦和对中，再开始记录。</div>'; return; }
     const id=ideal(next.side,next.k), est=Math.round(rnd(-1.4,1.4))*1e-3;
     s.rows.push({...next, x:+(s.X+est).toFixed(3), off:id==null?null:+(s.A-id).toFixed(4)});
-    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length}); table(); render();
+    s.checked=false; s.review=''; $('#'+P+'-review').innerHTML='';
+    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row:s.rows[s.rows.length-1]}); table(); render();
   }
   function byK(){
     const m={}; s.rows.forEach(r=>{ (m[r.k]=m[r.k]||{})[r.side]=r.x; });
@@ -138,6 +139,7 @@ const NR = (() => {
     return {D,items,mean,err:(mean-s.Rtrue/1000)/(s.Rtrue/1000)*100};
   }
   function table(){
+    LabStore.save(P,s);
     renderStats();
     if (!s.rows.length){ $('#'+P+'-table').innerHTML='<div class="empty">还没有数据。调好焦、对好中心后，按步骤 3 的顺序记录。</div>'; $('#'+P+'-result').innerHTML=''; return; }
     const m=byK(), c=calc(), ks=Object.keys(m).map(Number).sort((a,b)=>b-a);
@@ -175,7 +177,7 @@ ${Object.entries(byK()).sort((a,b)=>b[0]-a[0]).map(([k,v])=>`k=${k}: 左 ${v.L!=
 系统记录的操作情况：记录过程中鼓轮反转 ${s.reversals} 次；每次记录时叉丝偏离对应暗环中心的距离（μm，正为偏右）：${s.rows.map(r=>`${r.side==='L'?'左':'右'}${r.k}:${r.off==null?'?':Math.round(r.off*1000)}`).join('，')}。该处相邻暗环间距约 70 μm，偏离超过 35 μm 说明很可能数错了环。
 请给出批改意见：中文，200~300 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。要点名具体是哪几个环有问题。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
-    }).then(ok=>{ if(ok){ s.checked=true; render(); } });
+    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; LabStore.save(P,s); render(); } });
   }
   return {mount, render, key};
 })();

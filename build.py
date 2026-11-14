@@ -28,26 +28,6 @@ def pip_install():
             fail("依赖安装失败。请检查网络；如果提示 pythonnet 安装出错，请改用 Python 3.12 再试。")
 
 
-def bake_key():
-    """可选：把 API Key 打包进软件，同学打开就能直接用（Key 会包含在软件文件里）。"""
-    sys.path.insert(0, ROOT)
-    import server  # noqa: E402
-    key = server.CFG.get("api_key")
-    if not key:
-        return None
-    ans = input("\n检测到已保存的 DeepSeek API Key（%s）。\n是否把它打包进软件，让同学打开就能用 AI？"
-                "\n注意：Key 会包含在软件里，只建议发给信任的同学，并在 DeepSeek 后台设置用量上限。[y/N] " % server.mask(key))
-    if ans.strip().lower() != "y":
-        return None
-    import json
-    tmp = os.path.join(ROOT, "build", "bundle")
-    os.makedirs(tmp, exist_ok=True)
-    path = os.path.join(tmp, "default_config.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({"api_key": key, "model": server.CFG.get("model", "deepseek-chat")}, f)
-    return path
-
-
 def main():
     os.chdir(ROOT)
     if sys.version_info < (3, 9):
@@ -55,8 +35,6 @@ def main():
     if IS_WIN and sys.version_info >= (3, 14):
         print("提示：如果安装 pywebview 时 pythonnet 报错，请改用 Python 3.12。")
 
-    import server  # noqa: E402
-    print("光影助教 v" + server.APP_VERSION)
     print("\n[1/3] 安装打包工具（第一次需要几分钟）")
     pip_install()
 
@@ -68,13 +46,9 @@ def main():
         args += ["--onefile", "--icon", os.path.join("assets", "icon.ico")]
     elif IS_MAC:
         args += ["--icon", os.path.join("assets", "icon.icns"), "--osx-bundle-identifier", "edu.guangying.optics"]
-    baked = bake_key()
-    if baked:
-        args += ["--add-data", baked + sep + "."]
     args.append("main.py")
     if subprocess.call(args) != 0:
         fail("PyInstaller 打包失败，请把上面的报错信息复制下来排查。")
-    shutil.rmtree(os.path.join(ROOT, "build", "bundle"), ignore_errors=True)
 
     out = os.path.join(ROOT, "dist", NAME + (".exe" if IS_WIN else ".app" if IS_MAC else ""))
     print("\n[3/3] 完成！软件位置：\n    " + out)

@@ -14,6 +14,8 @@ import os
 import subprocess
 import sys
 import time
+import secrets
+import threading
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -21,7 +23,7 @@ from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.0.0"   # 发布新版本时同时修改 web/js/core.js 里的 APP_VERSION 和 CHANGELOG.md
+APP_VERSION = "1.0.1"
 
 
 # ---------------- 路径 ----------------
@@ -49,7 +51,10 @@ WEB_DIR = os.path.join(RES_DIR, "web")
 DATA_DIR = user_dir()
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 LOG_FILE = os.path.join(DATA_DIR, "usage_log.jsonl")
-MAX_BODY = 50_000
+MAX_BODY = 500_000
+SESSION_TOKEN = secrets.token_urlsafe(32)
+DATA_LOCK = threading.RLock()
+LAB_FILE = os.path.join(DATA_DIR, "lab_sessions.json")
 MODELS = ("deepseek-chat", "deepseek-reasoner")
 
 
@@ -112,13 +117,15 @@ def summary():
         with open(LOG_FILE, encoding="utf-8") as f:
             for line in f:
                 try:
-                    rows.append(json.loads(line))
+                    row = json.loads(line)
+                    if isinstance(row, dict) and isinstance(row.get("data"), dict) and isinstance(row.get("time"), str):
+                        rows.append(row)
                 except ValueError:
                     pass
     types = Counter(r.get("type") for r in rows)
     quiz = [r["data"].get("correct") for r in rows if r.get("type") == "quiz"]
     calls = [r["data"] for r in rows if r.get("type") == "ai_call"]
-    secs = [c["seconds"] for c in calls if c.get("seconds") is not None]
+    secs = [c["seconds"] for c in calls if isinstance(c.get("seconds"), (int, float))]
     labs = {}
     for r in rows:
         if r.get("type") in ("lab_record", "lab_review"):
@@ -132,7 +139,7 @@ def summary():
         "quiz": len(quiz), "quiz_rate": (sum(1 for q in quiz if q) / len(quiz)) if quiz else 0,
         "labs": list(labs.values()),
         "ai_calls": len(calls), "ai_avg_seconds": round(sum(secs) / len(secs), 1) if secs else 0,
-        "ai_tokens": sum(c.get("tokens") or 0 for c in calls), "ai_errors": types["ai_error"],
+        "ai_tokens": sum(c.get("tokens") or 0 for c in calls if isinstance(c.get("tokens"), (int, float))), "ai_errors": types["ai_error"],
     }
 
 
@@ -183,6 +190,32 @@ def open_folder(path):
         subprocess.Popen(["xdg-open", path])
 
 
+def load_labs():
+    with DATA_LOCK:
+        try:
+            with open(LAB_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("实验存档格式错误")
+            return data
+        except FileNotFoundError:
+            return {}
+
+
+def save_lab(lab, state):
+    if lab not in LAB_NAMES or not isinstance(state, dict) or not isinstance(state.get("rows"), list):
+        raise ValueError("实验数据格式不正确")
+    if len(state["rows"]) > 500:
+        raise ValueError("每次实验最多保存 500 条记录")
+    with DATA_LOCK:
+        data = load_labs()
+        data[lab] = state
+        temp = LAB_FILE + ".tmp"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, allow_nan=False)
+        os.replace(temp, LAB_FILE)
+
+
 # ---------------- HTTP ----------------
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -206,24 +239,50 @@ class Handler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         if length < 0 or length > MAX_BODY:
             raise ValueError("请求内容太长")
-        return json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        req = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        if not isinstance(req, dict):
+            raise ValueError("请求必须是 JSON 对象")
+        return req
+
+    def valid_host(self):
+        return self.headers.get("Host") in (f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}")
 
     def do_GET(self):
+        if not self.valid_host():
+            return self.send_json({"error": "不允许的访问地址"}, 403)
         path = self.path.split("?")[0]
         if path == "/api/health":
-            return self.send_json({"backend": True, "ok": bool(CFG["api_key"]), "model": CFG["model"], "version": APP_VERSION})
+            return self.send_json({"token": SESSION_TOKEN, "backend": True, "ok": bool(CFG["api_key"]), "model": CFG["model"], "version": APP_VERSION})
         if path == "/api/settings":
             return self.send_json({"has_key": bool(CFG["api_key"]), "key_masked": mask(CFG["api_key"]) if CFG["api_key"] else "",
                                    "model": CFG["model"], "data_dir": DATA_DIR})
+        if path == "/api/labs":
+            try:
+                return self.send_json(load_labs())
+            except (OSError, ValueError):
+                return self.send_json({"error": "实验存档读取失败，请保留存档并检查数据文件"}, 500)
         if path == "/api/stats":
             return self.send_json(summary())
         return super().do_GET()
 
     def do_POST(self):
+        origin = self.headers.get("Origin")
+        expected = "http://" + self.headers.get("Host", "")
+        if (not self.valid_host() or (origin and origin != expected)
+                or not secrets.compare_digest(self.headers.get("X-Session-Token", ""), SESSION_TOKEN)):
+            return self.send_json({"error": "请求来源无效，请重新打开软件"}, 403)
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+            return self.send_json({"error": "需要 application/json"}, 415)
         try:
             req = self.read_json()
         except Exception as e:  # noqa: BLE001
             return self.send_json({"error": str(e), "code": "bad_request"}, 400)
+        if self.path == "/api/labs":
+            try:
+                save_lab(req.get("lab"), req.get("state"))
+                return self.send_json({"ok": True})
+            except (ValueError, OSError) as e:
+                return self.send_json({"error": str(e)}, 400)
         if self.path == "/api/chat":
             prompt = str(req.get("prompt", "")).strip()
             if not prompt:
@@ -238,6 +297,8 @@ class Handler(SimpleHTTPRequestHandler):
             status, result = call_ai("请只回复两个字：收到", max_tokens=20)
             return self.send_json({"ok": status == 200, "seconds": result.get("seconds"), "error": result.get("error")}, status)
         if self.path == "/api/log":
+            if not isinstance(req.get("data", {}), dict):
+                return self.send_json({"error": "日志 data 必须是对象"}, 400)
             write_log({"type": str(req.get("type", ""))[:40], "data": req.get("data", {})})
             return self.send_json({"ok": True})
         if self.path == "/api/open-data":

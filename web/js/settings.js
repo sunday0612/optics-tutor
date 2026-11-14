@@ -7,7 +7,7 @@ const Settings = (() => {
   let lastFocus=null;
 
   async function api(path, body){
-    const r = await fetch('api/'+path, body===undefined ? {cache:'no-store'} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const r = await fetch('api/'+path, body===undefined ? {cache:'no-store'} : {method:'POST', headers:apiHeaders(), body:JSON.stringify(body)});
     const j = await r.json().catch(()=>({}));
     if (!r.ok) throw new Error(j.error || ('HTTP '+r.status));
     return j;
@@ -32,6 +32,7 @@ const Settings = (() => {
   function close(){ box.hidden=true; if (lastFocus) lastFocus.focus(); }
 
   async function save(){
+    if($('#saveKey').disabled) return;
     const key=$('#apiKey').value.trim(), model=$('#apiModel').value, btn=$('#saveKey');
     if (key && !/^sk-[\w-]{10,}$/.test(key)){ status('Key 的格式不对，应以 sk- 开头。','bad'); return; }
     btn.disabled=true; status('正在保存并测试…');

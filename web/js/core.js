@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.0.0';   // 与 server.py 保持一致
+const APP_VERSION = '1.0.1';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -50,12 +50,13 @@ function renderStats(){
 /* 把一次操作写进服务器日志（只有连上本地后端时才会发送） */
 function logEvent(type, data={}){
   if (!AI.backend) return;
-  fetch('api/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,data})}).catch(()=>{});
+  fetch('api/log',{method:'POST',headers:apiHeaders(),body:JSON.stringify({type,data})}).catch(()=>{});
 }
 
 /* ---------------- AI 接口 ----------------
  * 优先级：本地后端 server.py（DeepSeek）→ Claude 在线预览 → 离线规则
  * 页面里所有 AI 调用都走 aiText / aiJSON，换模型只需要改 server.py。 */
+function apiHeaders(){ return {'Content-Type':'application/json', 'X-Session-Token':AI.token||''}; }
 const AI = {mode:'detecting', model:'', sample:null, backend:false};
 AI.label = () => AI.mode==='deepseek' ? `DeepSeek（${AI.model}）` : AI.mode==='claude' ? 'Claude（预览）' : '内置规则';
 AI.online = () => AI.mode==='deepseek' || AI.mode==='claude';
@@ -72,7 +73,7 @@ function aiDetect(){
     AI.mode='detecting'; setBadge();
     try {
       const r = await fetch('api/health', {cache:'no-store'});
-      if (r.ok) { const j = await r.json(); AI.backend = !!(j && j.backend);
+      if (r.ok) { const j = await r.json(); AI.backend = !!(j && j.backend); AI.token=j.token||'';
         if (j && j.ok) { AI.mode='deepseek'; AI.model=j.model||'deepseek-chat'; setBadge(); return; } }
     } catch(e) {}
     if (!AI.backend) try {
@@ -84,10 +85,39 @@ function aiDetect(){
 }
 aiDetect();
 
+// Store experiments on disk through the backend: desktop ports change between launches.
+const LabStore = {
+  data:{}, queue:Promise.resolve(), failed:false,
+  ready:AI.ready.then(async()=>{
+    if (!AI.backend) return;
+    try { const r=await fetch('api/labs'); if(!r.ok) throw Error('读取失败'); LabStore.data=await r.json(); }
+    catch(e){ LabStore.failed=true; alert('实验存档读取失败。请重新打开软件，以免覆盖原记录。'); }
+  }),
+  restore(p,s){
+    const saved=this.data[p];
+    if(saved && Array.isArray(saved.rows) && saved.rows.length<=500){
+      const keys=Object.keys(s);
+      if(keys.every(k=>k in saved && (typeof s[k]!=='number' || Number.isFinite(saved[k])))) {
+        for(const k of keys) s[k]=saved[k];
+        s.review=typeof saved.review==='string'?saved.review:'';
+      }
+    }
+  },
+  save(p,s){
+    if(!AI.backend || this.failed) return;
+    const state=JSON.parse(JSON.stringify(s)); this.data[p]=state;
+    this.queue=this.queue.then(async()=>{
+      const r=await fetch('api/labs',{method:'POST',headers:apiHeaders(),body:JSON.stringify({lab:p,state}),keepalive:true});
+      if(!r.ok) throw Error('保存失败');
+      $('#'+p+'-save-status').textContent='实验已保存到本机';
+    }).catch(()=>{ $('#'+p+'-save-status').textContent='保存失败，请保持软件打开并再次记录或批改以重试'; });
+  }
+};
+
 async function aiText(prompt, {json=false}={}){
   await AI.ready;
   if (AI.mode==='deepseek'){
-    const r = await fetch('api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt, json})});
+    const r = await fetch('api/chat', {method:'POST', headers:apiHeaders(), body:JSON.stringify({prompt, json})});
     const j = await r.json().catch(()=>({}));
     if (!r.ok || !j.text) { const e=new Error(j.error||('HTTP '+r.status)); e.code=j.code||'http'; throw e; }
     return j.text;
@@ -120,6 +150,7 @@ function labShell(p, {title, principle, right}){
         <button class="ghost" id="${p}-undo">撤销</button>
         <button class="ghost" id="${p}-clr">清空</button>
       </div>
+      <div id="${p}-save-status" class="hint" role="status"></div>
       <div id="${p}-table"></div>
       <div id="${p}-result"></div>
     </div>
@@ -217,18 +248,23 @@ function drawStrip(c, value, {px=8, major=10, label=k=>k}={}){
 /* AI 批改流程（三个实验共用） */
 async function runReview(p, {check, prompt, offline}){
   const box=$('#'+p+'-review'), btn=$('#'+p+'-check');
-  const msg=check(); if (msg){ box.innerHTML=`<div class="note">${esc(msg)}</div>`; return false; }
-  stats.review++; renderStats(); logEvent('lab_review',{lab:p});
-  btn.disabled=true; btn.textContent='AI 批改中…'; box.innerHTML=loadingHTML('正在检查数据…');
-  await AI.ready;
-  let text=null, note='';
-  if (AI.online()){ try { text=await aiText(prompt()); } catch(e){ note=aiErrorNote(e); } }
-  else note='离线演示模式：下面是内置规则给出的批改意见。';
-  const by = text ? `<div class="hint">由 ${esc(AI.label())} 生成</div>` : '';
-  if (!text) text=offline();
-  box.innerHTML=paras(text)+(note?`<div class="note">${esc(note)}</div>`:'')+by;
-  btn.disabled=false; btn.textContent='重新检查';
-  return true;
+  if(btn.disabled) return false;
+  const msg=check(); if(msg){ box.innerHTML=`<div class="note">${esc(msg)}</div>`; return false; }
+  const locked=['check','rec','undo','clr'].map(k=>$('#'+p+'-'+k));
+  locked.forEach(b=>b.disabled=true);
+  btn.textContent='AI 批改中…'; box.innerHTML=loadingHTML('正在检查数据…');
+  try {
+    const snapshotPrompt=prompt(), fallback=offline();
+    await AI.ready;
+    let text='', note='';
+    if(AI.online()) { try { text=await aiText(snapshotPrompt); } catch(e){ note=aiErrorNote(e); } }
+    else note='离线演示模式：下面是内置规则给出的批改意见。';
+    if(!text) text=fallback;
+    box.innerHTML=paras(text)+(note?`<div class="note">${esc(note)}</div>`:'');
+    stats.review++; renderStats(); logEvent('lab_review',{lab:p,text});
+    return text;
+  } catch(e){ box.textContent='批改失败：'+e.message; return false; }
+  finally { locked.forEach(b=>b.disabled=false); btn.textContent='重新检查'; }
 }
 /* 角度工具（分光计用） */
 const angDiff = (a,b) => { let d=((a-b)%360+540)%360-180; return Math.abs(d); };     // 两个读数之间的夹角，自动处理跨 0° 的情况
