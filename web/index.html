@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>光影助教</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <!-- 标志：牛顿环，环半径按 √k 递增 -->
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor">
+        <circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none"/>
+        <circle cx="20" cy="20" r="7.4" stroke-width="1.6"/>
+        <circle cx="20" cy="20" r="10.5" stroke-width="1.3"/>
+        <circle cx="20" cy="20" r="12.8" stroke-width="1.1"/>
+        <circle cx="20" cy="20" r="14.8" stroke-width=".95"/>
+        <circle cx="20" cy="20" r="16.6" stroke-width=".8"/>
+        <circle cx="20" cy="20" r="18.2" stroke-width=".7"/>
+      </svg>
+      <div><div class="name">光影助教</div><div class="desc">波动光学可视化与虚拟实验</div></div>
+    </div>
+    <nav class="modes" aria-label="功能">
+      <button class="mode" data-v="sim">现象仿真</button>
+      <button class="mode" data-v="lab">虚拟实验</button>
+    </nav>
+    <div class="status">
+      <span class="badge" id="badge"><i></i><span>正在连接 AI…</span></span>
+      <button class="iconbtn" id="openSettings">设置</button>
+    </div>
+  </div>
+  <div class="vernier" aria-hidden="true"></div>
+</header>
+
+<main id="view-sim">
+  <section>
+    <div class="card">
+      <h2>提问</h2>
+      <textarea id="q" placeholder="例如：双缝间距 0.2mm，波长换成 450nm，条纹会怎么变？"></textarea>
+      <div class="row">
+        <button class="primary" id="ask">生成图样并讲解</button>
+        <span class="hint">Enter 发送，Shift+Enter 换行</span>
+      </div>
+      <div class="chips" id="chips"><span class="hint">也可以试试这些问题：</span></div>
+    </div>
+    <div class="card">
+      <h2>讲解</h2>
+      <div id="explain"></div>
+    </div>
+    <div class="card">
+      <h2>随堂小测</h2>
+      <div id="quiz"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card scope">
+      <div class="tabs" id="tabs"></div>
+      <div class="canvas-wrap fill" style="flex-grow:1.3">
+        <canvas id="pattern"></canvas>
+        <div class="caption" id="cap1">屏上图样（仿真）</div>
+      </div>
+      <div class="canvas-wrap fill">
+        <canvas id="curve"></canvas>
+        <div class="caption" id="cap2" style="left:auto;right:10px">光强分布</div>
+      </div>
+      <div class="metrics" id="metrics"></div>
+      <div class="controls" id="controls"></div>
+    </div>
+  </section>
+</main>
+
+<main id="view-lab" hidden>
+  <div class="labtabs" id="labtabs">
+    <button class="labtab" data-lab="michelson">迈克尔逊干涉仪测波长</button>
+    <button class="labtab" data-lab="newton">牛顿环测曲率半径</button>
+    <button class="labtab" data-lab="grating">分光计测光栅常数</button>
+  </div>
+  <div class="labwrap" id="labbox-michelson"></div>
+  <div class="labwrap" id="labbox-newton" hidden></div>
+  <div class="labwrap" id="labbox-grating" hidden></div>
+</main>
+
+<footer>
+  <div class="stats" id="stats"></div>
+</footer>
+
+<div class="sheet-backdrop" id="settings" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="sheet-head"><h2 id="settingsTitle">设置</h2><button class="iconbtn" id="closeSettings">关闭</button></div>
+    <section class="sheet-sec">
+      <h3>接入 DeepSeek</h3>
+      <p id="keyHint">在 platform.deepseek.com 创建 API Key 后填在这里。Key 只保存在这台电脑上。</p>
+      <label class="field"><span>API Key</span><input type="password" id="apiKey" placeholder="sk-…" autocomplete="off" spellcheck="false"></label>
+      <label class="field"><span>模型</span>
+        <select id="apiModel">
+          <option value="deepseek-chat">deepseek-chat（回答快，推荐）</option>
+          <option value="deepseek-reasoner">deepseek-reasoner（先推理再回答，较慢）</option>
+        </select>
+      </label>
+      <div class="row"><button class="primary" id="saveKey">保存并测试</button><span class="kstatus" id="keyStatus"></span></div>
+    </section>
+    <section class="sheet-sec">
+      <h3>使用数据</h3>
+      <p>每次提问、答题、实验记录和 AI 批改都会记在本机，可用来统计作品的应用成效。</p>
+      <dl class="usage" id="usage"></dl>
+      <div class="row"><button class="ghost" id="openData">打开数据文件夹</button><button class="ghost" id="refreshUsage">刷新</button></div>
+    </section>
+    <section class="sheet-sec">
+      <h3>关于</h3>
+      <p>光影助教 <span id="appVersion"></span>。现象仿真覆盖杨氏双缝、单缝衍射、光栅衍射、牛顿环和马吕斯定律；虚拟实验包括迈克尔逊干涉仪、牛顿环和分光计。</p>
+    </section>
+  </div>
+</div>
+
+<!-- 按顺序加载：公共工具 → 现象仿真 → 三个虚拟实验 → 设置 → 页面路由 -->
+<script src="js/core.js"></script>
+<script src="js/mini3d.js"></script>
+<script src="js/models3d.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/lab-michelson.js"></script>
+<script src="js/lab-newton.js"></script>
+<script src="js/lab-spectrometer.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

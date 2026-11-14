@@ -1,0 +1,253 @@
+/* =====================================================================
+ * 光影助教 · 样式
+ * 设计取向：精密光学仪器。冷灰白（磨砂玻璃）底色、石墨色文字、
+ * 增透膜的淡紫作为唯一强调色；仪器面板是黑色阳极氧化铝，带光学平台的孔阵；
+ * 标题用宋体（衬线），表格用学术论文的三线表。
+ * ===================================================================== */
+
+@font-face{
+  font-family:"GY Serif";
+  src:url("../fonts/serif-subset.woff") format("woff");
+  font-weight:600; font-display:swap;
+}
+
+:root{
+  --frost:#ECEEEB;        /* 页面底色：磨砂玻璃 */
+  --paper:#FAFAF8;        /* 记录本纸面 */
+  --hair:#D3D7D3;         /* 细线 */
+  --hair-2:#E4E7E3;
+  --ink:#17191C;          /* 石墨 */
+  --muted:#5C626A;
+  --faint:#8A9097;
+  --coat:#4E4486;         /* 增透膜紫 */
+  --coat-soft:#E9E7F3;
+  --ok:#2E6A4E;  --ok-soft:#E5EFE9;
+  --bad:#A23A2C; --bad-soft:#F6E7E3;
+  --anod:#16181B;         /* 阳极氧化铝面板 */
+  --anod-hair:#2C3036;
+  --anod-hole:#22252A;
+  --engrave:#E8E7E2;      /* 刻线白 */
+  --engrave-2:#9AA0A7;
+  --serif:"GY Serif","Songti SC","Noto Serif SC","Source Han Serif SC","STSong",serif;
+  --sans:"PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC","Hiragino Sans GB",system-ui,sans-serif;
+  --math:"Cambria Math","STIX Two Math","Times New Roman",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--frost);color:var(--ink);font:14.5px/1.7 var(--sans);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+[hidden]{display:none!important}
+button{font:inherit;cursor:pointer;color:inherit}
+:focus-visible{outline:2px solid var(--coat);outline-offset:2px;border-radius:4px}
+::selection{background:var(--coat-soft)}
+
+/* ---------------- 顶栏 ---------------- */
+.top{background:var(--paper);border-bottom:1px solid var(--hair);flex:none;position:relative;z-index:20}
+.top-inner{max-width:1400px;margin:0 auto;padding:12px 32px 10px;display:flex;align-items:center;gap:36px;position:relative;z-index:1}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:34px;height:34px;color:var(--ink)}
+.name{font-family:var(--serif);font-weight:600;font-size:21px;letter-spacing:2px;line-height:1.2}
+.desc{font-size:12.5px;color:var(--muted);letter-spacing:.5px}
+.modes{display:flex;gap:26px;align-self:stretch;align-items:stretch}
+.mode{background:none;border:0;padding:0 2px;font-size:15px;color:var(--muted);position:relative}
+.mode::after{content:"";position:absolute;left:0;right:0;bottom:-10px;height:2px;background:transparent}
+.mode:hover{color:var(--ink)}
+.mode.active{color:var(--ink);font-weight:600}
+.mode.active::after{background:var(--ink)}
+.status{margin-left:auto;display:flex;align-items:center;gap:14px}
+.badge{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.badge i{width:7px;height:7px;border-radius:50%;background:#B9BDB9;box-shadow:0 0 0 3px rgba(0,0,0,.04)}
+.badge.on i{background:var(--ok)} .badge.off i{background:#C49A3A}
+.iconbtn{background:none;border:1px solid var(--hair);border-radius:6px;padding:4px 12px;font-size:13px;color:var(--ink)}
+.iconbtn:hover{border-color:var(--ink)}
+/* 游标尺：主尺每格 10 px，游标 10 格共 90 px —— 页面上唯一的装饰 */
+.vernier{height:13px;max-width:1400px;margin:0 auto;position:relative;
+  background:
+    repeating-linear-gradient(90deg,var(--hair) 0 1px,transparent 1px 50px) 0 0/100% 7px no-repeat,
+    repeating-linear-gradient(90deg,var(--hair) 0 1px,transparent 1px 10px) 0 0/100% 4px no-repeat}
+.vernier::after{content:"";position:absolute;left:32px;top:7px;width:91px;height:5px;
+  background:repeating-linear-gradient(90deg,var(--coat) 0 1px,transparent 1px 9px)}
+
+/* ---------------- 主体布局：软件式分栏 ----------------
+ * 窗口高度固定，左栏（记录纸）和右栏（仪器面板）各自滚动，仪器面板始终铺满右侧。 */
+main{flex:1;min-height:0;width:100%;max-width:1400px;margin:0 auto;padding:20px 32px 18px;display:flex;flex-direction:column}
+#view-sim,.labwrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(330px,410px) 1fr;grid-template-rows:minmax(0,1fr);gap:24px}
+#view-lab .labwrap{gap:24px}
+#view-sim>section,.labwrap>section{min-height:0;display:flex;flex-direction:column}
+#view-sim>section>.card,.labwrap>section>.card{flex:none}
+#view-sim>section:first-child,.labwrap>section:first-child{background:var(--paper);border:1px solid var(--hair);border-radius:10px;overflow:auto;overscroll-behavior:contain}
+#view-sim>section:last-child>.card.scope,.labwrap>section:last-child>.card.scope{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+/* 细滚动条：纸面上浅灰，仪器面板上深灰 */
+section::-webkit-scrollbar,.card.scope::-webkit-scrollbar{width:8px}
+section::-webkit-scrollbar-thumb{background:#CDD1CD;border-radius:4px;border:2px solid var(--paper)}
+.card.scope::-webkit-scrollbar-thumb{background:#363A40;border-radius:4px;border:2px solid var(--anod)}
+section::-webkit-scrollbar-track,.card.scope::-webkit-scrollbar-track{background:transparent}
+/* 窗口很窄时退回普通的上下排列 */
+@media (max-width:1000px){
+  body{display:block;overflow:auto;height:auto}
+  main{display:block;padding:16px}
+  .top-inner{padding:10px 16px;gap:18px;flex-wrap:wrap}
+  #view-sim,.labwrap{grid-template-columns:1fr;grid-template-rows:auto}
+  #view-sim>section:first-child,.labwrap>section:first-child,#view-sim>section:last-child>.card.scope,.labwrap>section:last-child>.card.scope{overflow:visible}
+  main#view-lab{display:block}
+  .card.scope>.canvas-wrap.fill{flex:none;height:240px}
+}
+
+.card{padding:20px 24px}
+section:first-child>.card+.card{border-top:1px solid var(--hair-2)}
+.card h2{font-family:var(--serif);font-weight:600;font-size:17px;letter-spacing:1px;margin:0 0 12px;line-height:1.4}
+.card h2 .n{display:none}
+
+textarea{width:100%;min-height:88px;resize:vertical;border:1px solid var(--hair);border-radius:6px;padding:10px 12px;font:inherit;background:#fff;color:var(--ink);outline:none}
+textarea:focus{border-color:var(--ink)}
+.row{display:flex;gap:10px;align-items:center;margin-top:12px}
+.primary{background:var(--ink);color:#F4F4F1;border:1px solid var(--ink);border-radius:6px;padding:8px 16px;font-weight:500;letter-spacing:.5px}
+.primary:hover{background:#2A2D32}
+.primary:disabled{opacity:.55;cursor:default}
+.ghost{background:transparent;border:1px solid var(--hair);border-radius:6px;padding:8px 14px;color:var(--ink)}
+.ghost:hover{border-color:var(--ink)}
+.hint{font-size:12.5px;color:var(--faint)}
+.chips{display:flex;flex-direction:column;gap:2px;margin-top:14px;border-top:1px solid var(--hair-2);padding-top:10px}
+.chip{background:none;border:0;text-align:left;padding:4px 0;font-size:13.5px;color:var(--muted)}
+.chip:hover{color:var(--ink)}
+.qline{font-size:13.5px;color:var(--muted);border-left:2px solid var(--coat);padding:1px 0 1px 10px;margin-bottom:12px}
+.diffs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.diff{font-size:12.5px;color:var(--coat);background:var(--coat-soft);border-radius:4px;padding:1px 8px;font-variant-numeric:tabular-nums}
+#explain p{margin:0 0 10px}
+.note{font-size:12.5px;color:#7A5A16;background:#F5EEDC;border-radius:6px;padding:7px 10px;margin-top:10px}
+.loading{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:14px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--ink);animation:b 1.1s infinite ease-in-out}
+.dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.opt{display:block;width:100%;text-align:left;border:1px solid var(--hair);background:#fff;border-radius:6px;padding:8px 12px;margin-top:8px}
+.opt:hover:not(:disabled){border-color:var(--ink)}
+.opt:disabled{cursor:default;color:var(--muted)}
+.opt.ok{border-color:var(--ok);background:var(--ok-soft);color:var(--ink)}
+.opt.bad{border-color:var(--bad);background:var(--bad-soft);color:var(--ink)}
+.why{margin-top:12px;font-size:14px;padding-top:10px;border-top:1px solid var(--hair-2)}
+.why b{margin-right:6px}
+
+/* ---------------- 仪器面板（黑色阳极氧化 + 光学平台孔阵） ---------------- */
+.card.scope{background-color:var(--anod);color:var(--engrave);border-radius:10px;padding:0;overflow:hidden;
+  background-image:radial-gradient(circle at center,var(--anod-hole) 1.6px,transparent 2.1px);background-size:25px 25px;background-position:12px 12px;
+  box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 18px 40px -28px rgba(10,12,16,.55)}
+.tabs{display:flex;gap:2px;padding:14px 16px 0;flex-wrap:wrap}
+.tab{background:transparent;border:1px solid transparent;color:var(--engrave-2);border-radius:5px;padding:4px 12px;font-size:13.5px}
+.tab:hover{color:var(--engrave)}
+.tab.active{border-color:var(--anod-hair);background:#202328;color:var(--engrave)}
+.canvas-wrap{position:relative;margin:14px 16px 0;border:1px solid var(--anod-hair);border-radius:4px;overflow:hidden;background:#0E0F11}
+canvas{display:block;width:100%}
+/* 仪器面板是纵向弹性布局：图样和示意图自动占满剩余高度 */
+.card.scope{display:flex;flex-direction:column}
+.card.scope>*{flex:none}
+.card.scope>.canvas-wrap.fill{flex:1 1 0;min-height:150px}
+.canvas-wrap.fill canvas{position:absolute;inset:0;height:100%}
+.card.scope>.controls,.card.scope>.lab-grid{padding-bottom:18px}
+@media (max-height:820px){ .tip{display:none} .panel{gap:9px} .readout{padding:5px 2px} .readout .v{font-size:19px} .card.scope>.canvas-wrap.fill{min-height:140px} }
+.caption{position:absolute;left:10px;top:7px;font-size:12px;color:var(--engrave-2);pointer-events:none;text-shadow:0 1px 2px #000}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));padding:14px 16px 0}
+.metric{padding:4px 14px;border-left:1px solid var(--anod-hair)}
+.metric:first-child{border-left:0;padding-left:2px}
+.metric .k{font-size:12px;color:var(--engrave-2)}
+.metric .v{font-size:23px;font-weight:300;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:.3px}
+.metric .v small{font-size:12px;color:var(--engrave-2);margin-left:4px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 24px;padding:14px 16px 18px}
+.ctl{display:grid;grid-template-columns:1fr auto;align-items:center;font-size:13px;color:#C9C8C2;padding:3px 0}
+.ctl output{font-variant-numeric:tabular-nums;color:#fff}
+.ctl output small{color:var(--engrave-2);margin-left:3px}
+input[type=range]{grid-column:1/3;width:100%;margin:6px 0 2px;-webkit-appearance:none;appearance:none;background:transparent;height:16px}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:#3A3E45;border-radius:1px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--engrave);margin-top:-5.5px;box-shadow:0 0 0 3px rgba(232,231,226,.12)}
+input[type=range]::-moz-range-track{height:2px;background:#3A3E45}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:var(--engrave)}
+.scope input[type=checkbox]{accent-color:#B3A9DC}
+
+/* ---------------- 虚拟实验 ---------------- */
+#view-lab{flex:1;min-height:0;display:flex;flex-direction:column}
+.labtabs{flex:none;display:flex;gap:4px;flex-wrap:wrap;margin:-6px 0 16px;border-bottom:1px solid var(--hair)}
+.labtab{background:none;border:0;padding:8px 14px 10px;font-size:14.5px;color:var(--muted);position:relative}
+.labtab:hover{color:var(--ink)}
+.labtab.active{color:var(--ink);font-weight:600}
+.labtab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:2px;background:var(--coat)}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:8px 0;font-size:14px;color:var(--faint)}
+.steps li .s{width:22px;height:22px;border-radius:50%;border:1px solid #C3C8C3;display:grid;place-items:center;font-family:var(--serif);font-size:12px;margin-top:2px}
+.steps li.done{color:var(--muted)} .steps li.done .s{background:var(--ink);border-color:var(--ink);color:#fff;font-family:var(--sans);font-size:11px}
+.steps li.now{color:var(--ink)} .steps li.now .s{border:1.5px solid var(--coat);color:var(--coat);font-weight:600}
+.steps li b{color:inherit;font-weight:600}
+details.principle{margin-top:12px;font-size:13.5px;color:#3A3E44;border-top:1px solid var(--hair-2);padding-top:10px}
+details.principle summary{cursor:pointer;font-family:var(--serif);font-weight:600;letter-spacing:1px;color:var(--ink)}
+details.principle p{margin:8px 0 0}
+details.principle b{font-family:var(--math);font-style:italic;font-weight:400;font-size:15px}
+/* 三线表 */
+table.data{width:100%;border-collapse:collapse;margin-top:16px;font-size:13.5px;font-variant-numeric:tabular-nums;border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink)}
+table.data th{font-weight:500;font-size:12.5px;color:var(--ink);border-bottom:.75px solid var(--ink);padding:6px 6px;text-align:right}
+table.data td{padding:4px 6px;text-align:right}
+table.data td:first-child,table.data th:first-child{text-align:center}
+table.data tr.warn td{color:var(--bad)}
+.empty{color:var(--faint);font-size:13.5px;padding:12px 0 0}
+.result{margin-top:14px;font-size:13.5px;color:var(--muted);line-height:1.8}
+.result .big{font-size:22px;font-weight:300;color:var(--ink);font-variant-numeric:tabular-nums;margin:0 4px}
+.result b{color:var(--ink);font-variant-numeric:tabular-nums}
+.lab-grid{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:18px;padding:14px 16px 18px;align-items:start}
+@media (max-width:760px){.lab-grid{grid-template-columns:1fr}}
+.lab-grid .canvas-wrap{margin:0;background:#0C0D0F}
+.eye{margin:0 auto}
+.counter{position:absolute;right:8px;bottom:8px;font-size:12px;color:var(--engrave);background:rgba(14,15,17,.78);border:1px solid var(--anod-hair);padding:2px 9px;border-radius:4px;font-variant-numeric:tabular-nums}
+.msg{position:absolute;left:12px;right:12px;top:44%;text-align:center;color:#fff;font-size:13px;pointer-events:none;text-shadow:0 1px 3px #000}
+.panel{display:flex;flex-direction:column;gap:12px;color:#C9C8C2;font-size:13px}
+.panel .seg{display:flex;gap:2px;flex-wrap:wrap}
+.panel .ctl{padding:0}
+.readout{border-top:1px solid var(--anod-hair);border-bottom:1px solid var(--anod-hair);padding:8px 2px;line-height:1.6}
+.readout>div:first-child{font-size:12px;color:var(--engrave-2)}
+.readout .v{font-size:22px;font-weight:300;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:.4px}
+.readout .f{font-size:12px;color:var(--engrave-2);font-variant-numeric:tabular-nums}
+.strip{border:1px solid var(--anod-hair);border-radius:4px;cursor:ew-resize;touch-action:none}
+.hold{background:#1E2125;border:1px solid var(--anod-hair);color:var(--engrave);border-radius:5px;padding:7px 14px;font-size:13.5px;user-select:none;-webkit-user-select:none;touch-action:none}
+.hold:hover{border-color:#4A4F57}
+.hold:active{background:#2B2F35}
+.scope select{font:inherit;font-size:13px;background:#1E2125;color:var(--engrave);border:1px solid var(--anod-hair);border-radius:5px;padding:6px 8px}
+.panel label{color:#C9C8C2}
+.tip{font-size:12px;color:#7D8289;line-height:1.6}
+
+/* ---------------- 三维模型 ---------------- */
+.bench .caption,.viewseg,.v3d-tools,.v3d-hint{z-index:3}
+.v3d{position:absolute;inset:0;background:radial-gradient(120% 95% at 50% 30%,#25282d 0%,#131417 72%)}
+.v3d-canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab;touch-action:none}
+.v3d-canvas:active{cursor:grabbing}
+.v3d-labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.v3d-label{position:absolute;left:0;top:0;margin:-9px 0 0 -3px;padding:1px 6px 1px 10px;font-size:11.5px;line-height:16px;color:#ECEBE6;white-space:nowrap;text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,.85)}
+.v3d-label::before{content:"";position:absolute;left:0;top:5.5px;width:5px;height:5px;border-radius:50%;background:#B3A9DC;box-shadow:0 0 0 2px rgba(179,169,220,.25)}
+.viewseg{position:absolute;top:8px;right:8px;display:flex;gap:2px;padding:2px;background:rgba(18,19,22,.85);border:1px solid var(--anod-hair);border-radius:6px}
+.viewseg button,.v3d-tools button{background:none;border:0;color:var(--engrave-2);font-size:12px;padding:3px 10px;border-radius:4px}
+.viewseg button:hover,.v3d-tools button:hover{color:var(--engrave)}
+.viewseg button.on{background:#2C3036;color:var(--engrave)}
+.v3d-tools{position:absolute;right:8px;bottom:8px;display:flex;gap:2px;padding:2px;background:rgba(18,19,22,.85);border:1px solid var(--anod-hair);border-radius:6px}
+.v3d-tools button.on{color:#CFC8EE}
+.v3d-hint{position:absolute;left:10px;bottom:10px;font-size:11.5px;color:#7D8289;pointer-events:none}
+.canvas-wrap.bench.full{position:fixed;inset:0;margin:0;z-index:45;border:0;border-radius:0}
+@media (max-height:820px){ .v3d-hint{display:none} }
+
+/* ---------------- 状态栏 ---------------- */
+footer{flex:none;background:var(--paper);border-top:1px solid var(--hair);color:var(--faint);font-size:12px}
+.stats{max-width:1400px;margin:0 auto;padding:6px 32px;display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+.stats b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+@media (max-width:1000px){.stats{padding:6px 16px}}
+
+/* ---------------- 设置面板 ---------------- */
+.sheet-backdrop{position:fixed;inset:0;background:rgba(23,25,28,.28);z-index:50;display:flex;justify-content:flex-end}
+.sheet{width:min(440px,100%);height:100%;overflow:auto;background:var(--paper);border-left:1px solid var(--hair);padding:22px 28px 30px;animation:slide .22s ease-out}
+@keyframes slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}.dot{animation:none;opacity:.6}}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sheet h2{font-family:var(--serif);font-weight:600;font-size:20px;letter-spacing:2px;margin:0}
+.sheet-sec{padding:18px 0;border-top:1px solid var(--hair-2)}
+.sheet-sec:first-of-type{border-top:0}
+.sheet h3{font-family:var(--serif);font-weight:600;font-size:15px;letter-spacing:1px;margin:0 0 8px}
+.sheet p{margin:0 0 10px;font-size:13.5px;color:var(--muted)}
+.field{display:grid;gap:4px;margin-top:10px;font-size:13px;color:var(--muted)}
+.field input,.field select{font:inherit;font-size:14px;border:1px solid var(--hair);border-radius:6px;padding:8px 10px;background:#fff;color:var(--ink)}
+.field input:focus,.field select:focus{border-color:var(--ink);outline:none}
+.kstatus{font-size:13px}
+.kstatus.ok{color:var(--ok)} .kstatus.bad{color:var(--bad)}
+.usage{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:13.5px}
+.usage dt{color:var(--muted)} .usage dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
