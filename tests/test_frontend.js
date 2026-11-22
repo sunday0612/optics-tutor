@@ -18,7 +18,15 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD']]){
+  const internals={
+   PL:'validExtinction,checkPlate,intensity',
+   NR:'review,setRetake(levels){retake=levels}',
+  };
+  const exports=`return {s,init,calc${internals[n]?','+internals[n]:''}};`;
+  vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};',exports),labs);
+  vm.runInContext(n+'.init()',labs);
+ }
  vm.runInContext(`SP.s.rows=[{n:1,k:1,L:180,R:0},{n:1,k:-1,L:180,R:0}]`,labs);
  assert.equal(vm.runInContext('SP.calc().ok.length',labs),0);
  vm.runInContext(`MI.s.rows=[{N:0,R:32},{N:0,R:32},{N:0,R:32},{N:50,R:32.016}]`,labs);
@@ -72,6 +80,15 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  const incomplete=newtonCalc(normal.slice(0,-1));
  assert.equal(incomplete.validCount,0);
  assert.equal(incomplete.invalid.length,0);
+ // A valid pair does not unlock review while a requested retake is still incomplete.
+ let newtonReviewMessage;
+ labs.runReview=(_lab,{check})=>{ newtonReviewMessage=check(); return Promise.resolve(false); };
+ newtonCalc(normal);
+ vm.runInContext('NR.setRetake([27,22]); NR.review()',labs);
+ assert.match(newtonReviewMessage,/第 27 级、第 22 级尚未补齐/);
+ newtonCalc([...normal,...readings(22,21.5,28.5),...readings(27,20.99,29.01)]);
+ vm.runInContext('NR.review()',labs);
+ assert.equal(newtonReviewMessage,'');
  // ---------- v1.1.0：不确定度 ----------
  assert.equal(vm.runInContext("Unc.format(632.6347,1.04,'nm').text",labs),'(632.6 ± 1.1) nm');
  assert.equal(vm.runInContext("Unc.format(1.0944,0.0083,'m').text",labs),'(1.094 ± 0.009) m');
@@ -138,6 +155,47 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  vm.runInContext(`PL.s.type='h'; PL.s.delta=180`,labs);
  const ph=vm.runInContext('PL.calc().g[0].th',labs);
  assert(ph.ratio<1e-6 && Math.abs(ph.major-60)<0.11);
+ // A half-wave plate can be dark at the wrong analyzer angle. Both true axes remain valid.
+ vm.runInContext(`PL.s.delta=182; PL.s.type='h';`,labs);
+ assert(vm.runInContext('PL.intensity(177.3,70,true)<2',labs));
+ assert.equal(vm.runInContext("PL.validExtinction({th:177.3,a:70,I:1.1})",labs),false);
+ assert.equal(vm.runInContext("PL.validExtinction({th:117.3,a:130,I:0.99})",labs),true);
+ assert.equal(vm.runInContext("PL.validExtinction({th:117.3,a:40,I:0.99})",labs),true);
+
+ vm.runInContext(`PL.s.rows=[{t:'e',a:40,th:117.3,I:1},
+    {t:'w',a:85,th:117.3,I:471},{t:'w',a:85,th:117.3,I:471}];`,labs);
+ const duplicate=vm.runInContext('PL.calc().g[0]',labs);
+ assert.equal(duplicate.valid,false);
+ assert.equal(duplicate.ratio,null);
+ vm.runInContext(`PL.s.rows.splice(1,2,
+    {t:'w',a:85,th:162.3,I:235},{t:'w',a:85,th:252.3,I:235});`,labs);
+ assert.equal(vm.runInContext('PL.calc().g[0].valid',labs),false); // Orthogonal angles that miss both extrema.
+ vm.runInContext(`PL.s.rows.splice(1,2,
+    {t:'w',a:85,th:117.3,I:471},{t:'w',a:265,th:27.3,I:1});`,labs);
+ const halfTurn=vm.runInContext('PL.calc().g',labs);
+ assert.equal(halfTurn.length,1);
+ assert.equal(halfTurn[0].valid,true);
+ assert(halfTurn[0].ratio<0.01);
+
+ vm.runInContext(`PL.s.delta=90; PL.s.type='q';
+    PL.s.rows.splice(1,2,{t:'w',a:85,th:0,I:235},{t:'w',a:85,th:90,I:235});`,labs);
+ const circular=vm.runInContext('PL.calc().g[0]',labs);
+ assert.equal(circular.valid,true);
+ assert.equal(circular.ratio,1);
+ assert.equal(circular.major,null);
+
+ const plateCheck=()=>vm.runInContext('PL.checkPlate(PL.calc().e,PL.calc().g.filter(row=>row.valid))',labs);
+ assert.match(plateCheck(),/5 个波片角度/);
+ vm.runInContext(`for (const alpha of [15,30,60,75]){
+    const a=40+alpha, th=(alpha<45?alpha:alpha-90)+27.3;
+    for (const angle of [th,th+90]) PL.s.rows.push({t:'w',a,th:angle,I:PL.intensity(angle,a,true)});
+ } PL.s.guess='';`,labs);
+ assert.match(plateCheck(),/选择波片类型/);
+ vm.runInContext("PL.s.guess='q';",labs);
+ assert.equal(plateCheck(),'');
+ vm.runInContext(`PL.s.rows=PL.s.rows.filter(r=>r.t!=='w'||r.a!==85);
+   for (const th of [27.3,117.3]) PL.s.rows.push({t:'w',a:130,th,I:PL.intensity(th,130,true)});`,labs);
+ assert.match(plateCheck(),/45°/);
  // ---------- v1.4.0：半导体激光器与光电二极管 ----------
  vm.runInContext(`{const T0=75, rows=[];
    for(const Ts of [20,25,30,35]){ const ith=30*Math.exp((Ts-25)/T0), eta=0.5;

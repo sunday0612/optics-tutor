@@ -54,7 +54,7 @@ const NR = (() => {
     const saved=LabStore.restore(P,s);
     retake=Array.isArray(saved?.retake)?saved.retake:[];
     stats.records+=s.rows.length;
-    if (calc().invalid.length) clearReview();
+    if (calc().invalid.length || pendingRetake().length) clearReview();
     $('#'+P+'-review').innerHTML=paras(s.review||'');
     B=benchArea(P, Models3D.newton, ()=>({dx:s.A-s.Xc, y0:s.y0, drum:((s.X*100)%100+100)%100, focus:s.focus}),
       {cap3d:'三维模型（显微镜和装置的移动量已放大显示）'});
@@ -67,7 +67,16 @@ const NR = (() => {
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-drum'), 8, d=>{ turn(d); render(); });
     $('#'+P+'-rec').onclick=record;
-    $('#'+P+'-undo').onclick=()=>{ clearReview(); if (s.rows.pop()) stats.records--; if(!s.rows.length) s.reversals=0; table(); render(); };
+    $('#'+P+'-undo').onclick=()=>{
+      clearReview();
+      const removed=s.rows.pop();
+      if (removed){
+        stats.records--;
+        if (removed.retake && !retake.includes(removed.k)) retake.push(removed.k);
+      }
+      if (!s.rows.length) s.reversals=0;
+      table(); render();
+    };
     $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; retake=[]; s.reversals=0; clearReview(); table(); render(); };
     $('#'+P+'-check').onclick=review;
     $('#'+P+'-result').onclick=e=>{
@@ -145,6 +154,10 @@ const NR = (() => {
   function save(){
     LabStore.save(P,{...s,retake});
   }
+  function pendingRetake(){
+    const readings=byK();
+    return retake.filter(k=>readings[k]?.L==null||readings[k]?.R==null);
+  }
   function nextReading(){
     const readings=byK();
     const missing=SEQ.filter(({k,side})=>readings[k]?.[side]==null);
@@ -155,9 +168,11 @@ const NR = (() => {
     if (!next) return;
     if (!s.focused||!s.centered){ $('#'+P+'-result').innerHTML='<div class="note">先完成调焦和对中，再开始记录。</div>'; return; }
     const id=ideal(next.side,next.k), est=Math.round(rnd(-1.4,1.4))*1e-3;
-    s.rows.push({...next, x:+(s.X+est).toFixed(3), off:id==null?null:+(s.A-id).toFixed(4)});
+    const row={...next,x:+(s.X+est).toFixed(3),off:id==null?null:+(s.A-id).toFixed(4)};
+    if (retake.includes(next.k)) row.retake=true;
+    s.rows.push(row);
     clearReview();
-    const done=byK(); retake=retake.filter(k=>!(done[k]&&done[k].L!=null&&done[k].R!=null));
+    retake=pendingRetake();
     stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row:s.rows[s.rows.length-1]}); table(); render();
   }
   function byK(){
@@ -240,12 +255,16 @@ const NR = (() => {
       '【改进建议】测量前先越过第 35 环再反向，整个记录过程只朝一个方向转鼓轮；对准时让竖直叉丝与暗环相切在环宽中央；边移动边默数环数，必要时回到中心重数。'].join('\n');
   }
   function review(){
-    const c=calc();
+    const c=calc(), pending=pendingRetake();
     runReview(P,{
       check:()=>{
         if (c.invalid.length){
           const levels=c.invalid.map(({m,n})=>`第 ${m} 级与第 ${n} 级`).join('、');
           return `${levels}的数据无效，请先重测再检查。`;
+        }
+        if (pending.length){
+          const levels=pending.map(k=>`第 ${k} 级`).join('、');
+          return `${levels}尚未补齐，请完成重测再检查。`;
         }
         return c.validCount?'':'至少要有一组相差 5 级、左右两侧都记录了的数据才能检查。';
       },

@@ -7,10 +7,13 @@
 const PL = (() => {
   const P='pl', I0=480, EPS=0.002, TP=0.98;            // 起偏后光强 (µW)、偏振片消光比、波片透过率
   const INST=0.1;                                      // 转盘游标的仪器误差限 (°)
+  const ALIGNMENT_TOLERANCE=2, EXTINCTION_LIMIT=0.006, EXTREMA_TOLERANCE=15;
+  const PLATE_GROUPS=5;
+  const QUARTER_RATIO='理想 λ/4 波片在 α = 45° 时产生圆偏振光；其他角度的比值为 min(sin²α, cos²α) / max(sin²α, cos²α)。';
   const rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
   const mod=(x,m)=>((x%m)+m)%m, norm90=x=>{ x=mod(x,180); return x>90?x-180:x; };
   const round1=x=>Math.round(x*10)/10;
-  const s={}; let B=null, timer=0;
+  const s={}; let B=null, timer=0, fit=null;
   const sgn=()=>Math.random()<.5?-1:1;
 
   function init(){
@@ -54,9 +57,9 @@ const PL = (() => {
     el.innerHTML=labShell(P,{
       title:'马吕斯定律与波片',
       principle:`<p><b>马吕斯定律</b>：线偏振光通过检偏器后，光强 I = I₀cos²θ，θ 是光的振动方向与检偏器透振方向的夹角。实际偏振片不能完全消光，所以写成 <b>I = I<sub>min</sub> + (I<sub>max</sub> − I<sub>min</sub>)·cos²(θ − θ<sub>∥</sub>)</b>，θ 是检偏器转盘读数，θ<sub>∥</sub> 是检偏器与起偏器平行时的读数，I<sub>min</sub>/I<sub>max</sub> 叫消光比。转盘零点并没有对准起偏器，θ<sub>∥</sub> 要从数据里求出来。</p>
-        <p>数据处理：cos²(θ − θ<sub>∥</sub>) = ½[1 + cos2(θ − θ<sub>∥</sub>)]，把 I 写成 a₀ + a₁cos2θ + a₂sin2θ，用最小二乘求出 a₀、a₁、a₂，就得到 I<sub>max</sub>、I<sub>min</sub> 和 θ<sub>∥</sub> = ½·arctan(a₂/a₁)。再以 cos²(θ − θ<sub>∥</sub>) 为横轴、I 为纵轴作图，数据点落在一条直线上就验证了马吕斯定律。</p>
+        <p>数据处理：cos²(θ − θ<sub>∥</sub>) = ½[1 + cos2(θ − θ<sub>∥</sub>)]，把 I 写成 a₀ + a₁cos2θ + a₂sin2θ，用最小二乘求出 a₀、a₁、a₂，就得到 I<sub>max</sub>、I<sub>min</sub> 和 θ<sub>∥</sub> = ½·atan2(a₂, a₁)。再以 cos²(θ − θ<sub>∥</sub>) 为横轴、I 为纵轴作图，数据点落在一条直线上就验证了马吕斯定律。</p>
         <p><b>波片</b>：波片使沿快轴、慢轴振动的两个分量产生相位差 δ。λ/4 波片 δ = 90°，λ/2 波片 δ = 180°。把波片放在两块正交的偏振片之间，转动波片到再次消光，这时波片的一个光轴与起偏器平行。从这个位置把波片转过 α 角：</p>
-        <p>· λ/4 波片：出射椭圆偏振光，长轴沿波片光轴，I<sub>min</sub>/I<sub>max</sub> = tan²α（α ≤ 45°）；α = 45° 时变成圆偏振光，转检偏器光强不变。<br>· λ/2 波片：出射仍是线偏振光，I<sub>min</sub> ≈ 0，振动方向转过 2α。</p>
+        <p>· λ/4 波片：出射椭圆偏振光，长轴沿波片光轴。I<sub>min</sub>/I<sub>max</sub> = min(sin²α, cos²α) / max(sin²α, cos²α)；理想波片在 α = 45° 时产生圆偏振光。<br>· λ/2 波片：出射仍是线偏振光，I<sub>min</sub> ≈ 0，振动方向转过 2α。</p>
         <p>只测光强可以找出波片光轴的方向，但分不出哪条是快轴、哪条是慢轴，要用一片已知快轴的波片做补偿才能区分。</p>
         <p>不确定度：θ<sub>∥</sub> 的 A 类由最小二乘的协方差矩阵求出，B 类按游标 ${INST}° 取 ${INST}°/√3，两者合成。</p>`,
       right:`<div class="canvas-wrap fill"><canvas id="${P}-bench"></canvas><div class="caption">装置示意（沿光路看各转盘）</div></div>
@@ -75,18 +78,40 @@ const PL = (() => {
           <div class="tip">按住按钮转动转盘，也可以拖动刻度条；键盘 ← → 每次 0.1°（Shift 为 1°）。</div>
         </div>
       </div>`});
-    init(); LabStore.restore(P,s); stats.records+=s.rows.length; $('#'+P+'-review').innerHTML=paras(s.review||'');
+    init();
+    const saved=LabStore.restore(P,s);
+    s.plateReview=typeof saved?.plateReview==='string'?saved.plateReview:'';
+    // 旧版批改可能把未知波片答案混进基础反馈，保留实验读数并重新批改这类存档。
+    if (typeof saved?.plateReview!=='string' && eRow()){ s.checked=false; s.review=''; }
+    showReview();
+    stats.records+=s.rows.length;
     B=benchArea(P, Models3D.polarization, ()=>({th:s.th, a:s.a, t0:s.t0, plate:s.plate, I:intensity(), I0, reading:fmtI(meter())}), {cap3d:'三维模型'});
     B.onChange=render;
-    $('#'+P+'-modes').onclick=e=>{ const b=e.target.closest('button'); if (!b) return; s.mode=b.dataset.v; if (s.mode==='malus') s.sel='an'; render(); };
+    $('#'+P+'-modes').onclick=e=>{
+      const b=e.target.closest('button'); if (!b) return;
+      s.mode=b.dataset.v;
+      if (s.mode==='malus') s.sel='an';
+      showReview(); save(); render();
+    };
     $('#'+P+'-sels').onclick=e=>{ const b=e.target.closest('button'); if (b && !b.disabled){ s.sel=b.dataset.s; render(); } };
     $('#'+P+'-insert').onclick=()=>{ s.plate=!s.plate; if (!s.plate) s.sel='an'; render(); };
-    $('#'+P+'-guess').value=s.guess; $('#'+P+'-guess').onchange=e=>{ s.guess=e.target.value; save(); };
+    $('#'+P+'-guess').value=s.guess;
+    $('#'+P+'-guess').onchange=e=>{
+      s.guess=e.target.value;
+      clearReview('plate'); table(); render();
+    };
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-dial'), 6, d=>{ turn(d); render(); });
     $('#'+P+'-rec').onclick=record;
-    $('#'+P+'-undo').onclick=()=>{ s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; if (s.rows.pop()) stats.records--; table(); render(); };
-    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; table(); render(); };
+    $('#'+P+'-undo').onclick=()=>{
+      const row=s.rows.pop();
+      if (!row) return;
+      stats.records--; clearReview(row.t==='m'?'malus':'plate'); table(); render();
+    };
+    $('#'+P+'-clr').onclick=()=>{
+      stats.records-=s.rows.length; s.rows=[];
+      clearReview('malus'); clearReview('plate'); table(); render();
+    };
     $('#'+P+'-check').onclick=review;
     table();
     clearInterval(timer);
@@ -99,6 +124,7 @@ const PL = (() => {
   function render(){
     if (!(B.is3d() && B.update())) bench();
     view();
+    if (fit) chart(fit);
     const plateMode=s.mode==='plate';
     document.querySelectorAll('#'+P+'-modes .tab').forEach(b=>b.classList.toggle('active',b.dataset.v===s.mode));
     document.querySelectorAll('#'+P+'-sels .tab').forEach(b=>{ b.classList.toggle('active',b.dataset.s===s.sel); b.disabled=b.dataset.s==='wp'&&!(plateMode&&s.plate); });
@@ -107,14 +133,15 @@ const PL = (() => {
     const cur=s.sel==='wp'?s.a:s.th;
     $('#'+P+'-readout').innerHTML=`<div>${s.sel==='wp'?'波片转盘读数':'检偏器转盘读数'}</div><div class="v">${(round1(mod(cur,360))%360).toFixed(1)}°</div><div class="f">检偏器 ${(round1(mod(s.th,360))%360).toFixed(1)}°　${s.plate?`波片 ${(round1(mod(s.a,360))%360).toFixed(1)}°`:'未放波片'}　主刻度 1°，游标 0.1°</div>`;
     drawStrip($('#'+P+'-dial'), cur, {px:6, label:k=>`${mod(k,360)}°`});
-    const m=s.rows.filter(r=>r.t==='m'), cov=coverage(m.map(r=>r.th)), g=groups().filter(x=>x.n>=2).length;
-    $('#'+P+'-rec').textContent = plateMode ? (s.plate&&!eRow()?'记录消光位置':'记录光强') : '记录光强';
+    const m=s.rows.filter(r=>r.t==='m'), cov=coverage(m.map(r=>r.th)), g=groups().filter(x=>x.valid).length;
+    const aligned=validExtinction(eRow());
+    $('#'+P+'-rec').textContent=plateMode&&s.plate&&!aligned?'记录消光位置':'记录光强';
     renderSteps(P,[
       [s.ext,'<b>找消光</b>：在“马吕斯定律”中转动检偏器，找到光强最小的位置。读数不是 90°，说明转盘零点没有对准起偏器。'],
       [m.length>=12&&cov,`<b>测 I(θ)</b>：从任意位置开始，每转 10°～15° 记录一次光强，至少转过 180°、记 12 个点（已记 ${Math.min(m.length,12)}/12）。`],
-      [!!eRow(),'<b>进阶：定波片光轴</b>：切到“波片”，先不放波片，把检偏器转到消光；再放入波片，转动<b>波片</b>直到再次消光，记录消光位置。'],
-      [g>=5,`<b>进阶：测偏振态</b>：从消光位置起把波片转过 15°、30°、45°、60°、75°、90° 等角度，每个角度转检偏器找出光强最大和最小，各记一次（已测 ${Math.min(g,5)}/5 个角度）。`],
-      [s.checked,'<b>处理数据</b>：拟合马吕斯定律，算出各角度的 I<sub>min</sub>/I<sub>max</sub>，在“我的判断”里选出波片类型，再让 AI 助教检查。']]);
+      [aligned,'<b>进阶：定波片光轴</b>：先取出波片，把检偏器转到消光。保持检偏器不动，放入波片后转动波片到再次消光。'],
+      [g>=PLATE_GROUPS,`<b>进阶：测偏振态</b>：从消光位置起把波片转过 15°、30°、45°、60°、75°、90° 等角度。每个位置转动检偏器找最大、最小读数，各记一次；光强几乎不变时，仍要在相隔约 90° 的位置分别记录（已测 ${Math.min(g,PLATE_GROUPS)}/${PLATE_GROUPS} 个角度）。`],
+      [plateMode?!!s.plateReview:s.checked,'<b>处理数据</b>：在基础页可独立检查拟合。进阶页至少测 5 个有效角度（含 45° 附近），选出波片类型后再提交。']]);
   }
   function bench(){
     const c=$('#'+P+'-bench'); const {ctx,W}=benchSetup(c);
@@ -151,14 +178,14 @@ const PL = (() => {
     ctx.strokeStyle='#2a2d33'; ctx.lineWidth=1; ctx.fillStyle='#6f757d'; ctx.font=`10px ${F}`; ctx.textAlign='center';
     for (let t=0;t<=360;t+=90){ ctx.beginPath(); ctx.moveTo(X(t),y1); ctx.lineTo(X(t),y0); ctx.stroke(); ctx.fillText(t+'°',X(t),y0+13); }
     ctx.textAlign='right'; for (const v of [0,0.5,1]){ ctx.beginPath(); ctx.moveTo(x0,Y(v*I0)); ctx.lineTo(x1,Y(v*I0)); ctx.stroke(); ctx.fillText(String(Math.round(v*I0)),x0-4,Y(v*I0)+3); }
-    const pts = s.mode==='malus' ? s.rows.filter(r=>r.t==='m') : s.rows.filter(r=>r.t==='w'&&Math.abs(r.a-round1(mod(s.a,360))%360)<0.05);
+    const pts=s.mode==='malus'?s.rows.filter(r=>r.t==='m'):waveRows(eRow()).filter(r=>platePosition(r.a)===platePosition(s.a));
     ctx.fillStyle='#ffd166'; pts.forEach(r=>{ ctx.beginPath(); ctx.arc(X(r.th),Y(r.I),3,0,Math.PI*2); ctx.fill(); });
     ctx.strokeStyle='rgba(255,90,60,.9)'; ctx.beginPath(); ctx.moveTo(X(mod(s.th,360)),y1); ctx.lineTo(X(mod(s.th,360)),y0); ctx.stroke();
     ctx.fillStyle='#ff5a3c'; ctx.beginPath(); ctx.arc(X(mod(s.th,360)),Y(rd),4,0,Math.PI*2); ctx.fill();
     ctx.textAlign='left'; ctx.fillStyle='#8a9099'; ctx.fillText(s.mode==='malus'?'已记录的 I–θ（黄点）':'当前波片位置已记录的点',x0+4,y1-8);
     /* 批改后：画出当前波片位置出射光的偏振态 */
     const msg=$('#'+P+'-msg'), ctr=$('#'+P+'-counter');
-    if (s.checked && s.plate){ const E=field(); const cx=S-48, cy=h+60, R=28;
+    if (s.mode==='plate' && s.plateReview && s.plate){ const E=field(); const cx=S-48, cy=h+60, R=28;
       ctx.strokeStyle='#3a3e45'; ctx.beginPath(); ctx.arc(cx,cy,R+4,0,Math.PI*2); ctx.stroke();
       ctx.strokeStyle='#8fc3ff'; ctx.lineWidth=1.6; ctx.beginPath();
       for (let k=0;k<=64;k++){ const w=k/64*2*Math.PI, ex=E[0][0]*Math.cos(w)+E[0][1]*Math.sin(w), ey=E[1][0]*Math.cos(w)+E[1][1]*Math.sin(w); const px=cx+ey*R, py=cy-ex*R; k?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.stroke();
@@ -170,9 +197,30 @@ const PL = (() => {
   }
 
   /* ---------- 数据 ---------- */
+  function showReview(){
+    const review=s.mode==='plate'?s.plateReview:s.review;
+    $('#'+P+'-review').innerHTML=paras(review||'');
+    $('#'+P+'-check').textContent=review?'重新检查':'检查我的数据';
+  }
+  function clearReview(mode){
+    if (mode==='malus'){ s.checked=false; s.review=''; }
+    else s.plateReview='';
+    if (s.mode===mode) showReview();
+  }
+  const crossed=th=>norm90(th-s.t0-90);
+  // 两条正交的光轴都能消光。这里衡量到最近光轴的偏差。
+  const axisError=a=>mod(a-s.f0+45,90)-45;
+  const validExtinction=e=>!!e && Math.abs(crossed(e.th))<=ALIGNMENT_TOLERANCE
+    && Math.abs(axisError(e.a))<=ALIGNMENT_TOLERANCE && e.I/I0<=EXTINCTION_LIMIT;
+  const platePosition=a=>round1(mod(a,180))%180;
+  function waveRows(e){
+    return validExtinction(e)?s.rows.slice(s.rows.indexOf(e)+1).filter(r=>r.t==='w'):[];
+  }
   function note(t){ table(); $('#'+P+'-result').insertAdjacentHTML('afterbegin',`<div class="note">${esc(t)}</div>`); }
-  function push(row){ s.rows.push(row); s.checked=false; s.review=''; $('#'+P+'-review').innerHTML='';
-    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row}); table(); render(); }
+  function push(row){
+    s.rows.push(row); clearReview(row.t==='m'?'malus':'plate');
+    stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row}); table(); render();
+  }
   function record(){
     const I=+fmtI(meter()), th=round1(mod(s.th,360))%360;
     if (s.mode==='malus'){
@@ -181,9 +229,11 @@ const PL = (() => {
     }
     if (!s.plate) return note('先点“放入波片”。放入之前，检偏器要转到消光位置。');
     const a=round1(mod(s.a,360))%360;
-    if (!eRow()){
-      if (I/I0>0.006) return note('还没有消光：先取出波片把检偏器转到消光，再放入波片，转动波片直到光强重新变到最小。');
-      return push({t:'e', a, th, I, off:+norm90(a-s.f0).toFixed(2), cross:+norm90(th-s.t0-90).toFixed(2)});
+    if (!validExtinction(eRow())){
+      if (Math.abs(crossed(th))>ALIGNMENT_TOLERANCE) return note('检偏器尚未与起偏器正交。请取出波片，重新找消光，然后保持检偏器不动。');
+      const e={t:'e', a, th, I, off:+axisError(a).toFixed(2), cross:+crossed(th).toFixed(2)};
+      if (!validExtinction(e)) return note('波片还没有对准光轴。保持检偏器不动，继续转波片找光强最小的位置。');
+      return push(e);
     }
     push({t:'w', a, th, I});
   }
@@ -213,28 +263,60 @@ const PL = (() => {
     return {n, a0, a1, a2, Imax:a0+C, Imin:a0-C, ratio:(a0-C)/(a0+C), par, uA, uB, u:Unc.combine(uA,uB), r2:1-ss/st, rms:Math.sqrt(ss/n),
       err:norm90(par-s.t0), pts:m.map(r=>({x:Math.cos(rad(r.th-par))**2, I:r.I}))};
   }
-  /* 波片数据：同一个波片读数下的记录为一组 */
-  function groups(){
-    const e=eRow(); if (!e) return [];
-    const idx=s.rows.indexOf(e), g=new Map();
-    s.rows.slice(idx+1).filter(r=>r.t==='w').forEach(r=>{ const k=r.a.toFixed(1); if (!g.has(k)) g.set(k,[]); g.get(k).push(r); });
-    const par=mod(e.th+90,180);                                                         // 消光时检偏器与起偏器正交
-    return [...g.values()].map(rs=>{ const mx=rs.reduce((p,r)=>r.I>p.I?r:p), mn=rs.reduce((p,r)=>r.I<p.I?r:p), a=rs[0].a;
-      return {a, alpha:+norm90(a-e.a).toFixed(1), n:rs.length, Imax:mx.I, Imin:mn.I, ratio:mn.I/mx.I, major:+norm90(mx.th-par).toFixed(1), crossOK:Math.abs(norm90(mx.th-mn.th))>60, th:ellipse(a)}; })
-      .sort((p,q)=>Math.abs(p.alpha)-Math.abs(q.alpha));
+  /* 构成极值的两次读数要接近正交。近圆偏振时长轴不稳定，只检查角度间隔。 */
+  function plateExtrema(rs, theory){
+    const high=Math.max(...rs.map(r=>r.I)), low=Math.min(...rs.map(r=>r.I));
+    const nearlyCircular=theory.ratio>=0.95;
+    const near=(th,target)=>Math.abs(norm90(th-target))<=EXTREMA_TOLERANCE;
+    const major=theory.major+s.t0;
+    const maxReading=rs.find(hi=>hi.I===high && (nearlyCircular||near(hi.th,major)) &&
+      rs.some(lo=>lo.I===low && near(lo.th,hi.th+90) && (nearlyCircular||near(lo.th,major+90))));
+    return {high,low,maxReading};
   }
-  function calc(){ return {m:malus(), g:groups(), e:eRow(), truth:{type:s.type, delta:s.delta, t0:s.t0}}; }
+  function groups(){
+    const e=eRow(), g=new Map();
+    for (const r of waveRows(e)){
+      const key=platePosition(r.a);
+      if (!g.has(key)) g.set(key,[]);
+      g.get(key).push(r);
+    }
+    const par=e?mod(e.th+90,180):0;
+    return [...g.values()].map(rs=>{
+      const a=rs[0].a, th=ellipse(a);
+      const {high,low,maxReading}=plateExtrema(rs,th);
+      const valid=!!maxReading;
+      const ratio=valid?low/high:null;
+      const major=valid&&ratio<0.95?+norm90(maxReading.th-par).toFixed(1):null;
+      return {a,alpha:+norm90(a-e.a).toFixed(1),n:rs.length,Imax:high,Imin:low,ratio,major,valid,th};
+    }).sort((p,q)=>Math.abs(p.alpha)-Math.abs(q.alpha));
+  }
+  const near45=g=>g.find(x=>Math.abs(Math.abs(x.alpha)-45)<=3);
+  function checkPlate(e,good){
+    if (!validExtinction(e)) return '请先在检偏器正交时记录波片的消光位置。';
+    if (good.length<PLATE_GROUPS) return `请先测满 ${PLATE_GROUPS} 个波片角度的有效极值（当前 ${good.length} 个）。`;
+    if (!near45(good)) return '还缺少波片转过约 45° 时的有效极值，请补测。';
+    if (s.guess!=='q' && s.guess!=='h') return '请先在“我的判断”中选择波片类型。';
+    return '';
+  }
+  function calc(){ return {m:malus(),g:groups(),e:eRow(),truth:{type:s.type,delta:s.delta,t0:s.t0}}; }
   const TYPE={q:'λ/4 波片', h:'λ/2 波片'};
 
   function table(){
     save(); renderStats();
+    fit=null;
     if (!s.rows.length){ $('#'+P+'-table').innerHTML='<div class="empty">还没有数据。先转检偏器找到消光位置，再开始记录。</div>'; $('#'+P+'-result').innerHTML=''; return; }
     const c=calc(), m=s.rows.filter(r=>r.t==='m');
+    const revealPlate=!!s.plateReview;
+    fit=c.m;
     let h='';
     if (m.length) h+=`<div class="hint" style="margin-top:0">马吕斯定律（${m.length} 个点）</div><table class="data plt"><tr><th>θ/°</th>${m.map(r=>`<td>${r.th.toFixed(1)}</td>`).join('')}</tr><tr><th>I/µW</th>${m.map(r=>`<td>${r.I}</td>`).join('')}</tr></table>`;
-    if (c.e) h+=`<div class="hint">波片消光位置：波片 ${c.e.a.toFixed(1)}°，检偏器 ${c.e.th.toFixed(1)}°，I = ${c.e.I} µW</div>`;
-    if (c.g.length) h+=`<table class="data"><tr><th>α/°</th><th>I<sub>max</sub>/µW</th><th>I<sub>min</sub>/µW</th><th>I<sub>min</sub>/I<sub>max</sub></th><th>长轴方向/°</th>${s.checked?'<th>理论比值</th>':''}</tr>`+
-      c.g.map(x=>`<tr${x.n<2?' class="bad"':''}><td>${x.alpha.toFixed(1)}</td><td>${x.Imax}</td><td>${x.n<2?'—':x.Imin}</td><td>${x.n<2?'只记了 1 次':x.ratio.toFixed(3)}</td><td>${x.n<2?'—':x.major.toFixed(1)}</td>${s.checked?`<td>${x.th.ratio.toFixed(3)}</td>`:''}</tr>`).join('')+'</table>';
+    if (validExtinction(c.e)) h+=`<div class="hint">波片消光位置：波片 ${c.e.a.toFixed(1)}°，检偏器 ${c.e.th.toFixed(1)}°，I = ${c.e.I} µW</div>`;
+    else if (c.e) h+='<div class="note">旧存档的波片消光位置未通过检查。请重新记录消光位置，再测各角度的极值。原始记录仍保留。</div>';
+    if (c.g.length) h+=`<table class="data"><tr><th>α/°</th><th>I<sub>max</sub>/µW</th><th>I<sub>min</sub>/µW</th><th>I<sub>min</sub>/I<sub>max</sub></th><th>长轴方向/°</th>${revealPlate?'<th>理论比值</th>':''}</tr>`+
+      c.g.map(x=>{
+        const ratio=x.valid?x.ratio.toFixed(3):x.n<2?'只记了 1 次':'请重新找极值';
+        return `<tr${x.valid?'':' class="warn"'}><td>${x.alpha.toFixed(1)}</td><td>${x.valid?x.Imax:'—'}</td><td>${x.valid?x.Imin:'—'}</td><td>${ratio}</td><td>${x.major?.toFixed(1)??'—'}</td>${revealPlate?`<td>${x.th.ratio.toFixed(3)}</td>`:''}</tr>`;
+      }).join('')+'</table>';
     $('#'+P+'-table').innerHTML=`<div class="fbtable">${h}</div>`;
     let out='';
     if (c.m){ const f=Unc.format(c.m.par,c.m.u,'°');
@@ -245,19 +327,23 @@ const PL = (() => {
         ${s.checked?`<div>转盘真实偏差：θ<sub>∥</sub> 应为 ${s.t0.toFixed(2)}°（或加 180°），相差 <b>${c.m.err>=0?'+':''}${c.m.err.toFixed(2)}°</b></div>`:''}
         <canvas id="${P}-chart" class="chart"></canvas></div>`;
     } else if (m.length) out+=`<div class="hint" style="margin-top:8px">至少需要 8 个点，并且角度要分布在半圈以上（相邻两点间隔不超过 45°）才能拟合。</div>`;
-    const good=c.g.filter(x=>x.n>=2);
+    const good=c.g.filter(x=>x.valid);
     if (good.length){
-      const g45=good.find(x=>Math.abs(Math.abs(x.alpha)-45)<=3);
+      const g45=near45(good);
       out+=`<div class="result">波片：${g45?`α ≈ 45° 时 I<sub>min</sub>/I<sub>max</sub> = ${g45.ratio.toFixed(3)}，`:'还没测 α ≈ 45° 的位置，'}你的判断：<b>${s.guess?TYPE[s.guess]:'还没选'}</b>
-        ${s.checked?`<div>这片是 <b>${TYPE[s.type]}</b>（实际相位延迟 δ = ${s.delta.toFixed(1)}°）。${s.type==='q'?'α = 45° 附近光强几乎不随检偏器变化，是圆偏振光；其他角度是长轴沿波片光轴的椭圆偏振光，I<sub>min</sub>/I<sub>max</sub> ≈ tan²α。':'各角度 I<sub>min</sub> 都接近零，出射仍是线偏振光，振动方向转过 2α。'}</div>`:'<div class="hint">波片类型和理论值在 AI 批改后显示。</div>'}</div>`;
+        ${revealPlate?`<div>这片是 <b>${TYPE[s.type]}</b>（实际相位延迟 δ = ${s.delta.toFixed(1)}°）。${s.type==='q'?QUARTER_RATIO:'理想 λ/2 波片的出射光为线偏振光，振动方向转过 2α；有制造误差时最小光强可能略大于零。'}</div>`:'<div class="hint">波片类型和理论值在进阶实验批改后显示。</div>'}</div>`;
     }
     $('#'+P+'-result').innerHTML=out;
     if (c.m) chart(c.m);
   }
   /* I 与 cos²(θ − θ∥) 的关系：应为直线 */
   function chart(m){
-    const cv=$('#'+P+'-chart'); if (!cv||!cv.clientWidth) return;
+    const cv=$('#'+P+'-chart'), width=cv?.clientWidth;
+    if (!width) return;
+    const size=`${width}×${window.devicePixelRatio||1}`;
+    if (cv.dataset.drawnSize===size) return;
     const {ctx,dpr,W,H}=setup(cv,170); ctx.setTransform(dpr,0,0,dpr,0,0);
+    cv.dataset.drawnSize=size;
     const x0=46, x1=W-12, y0=H-28, y1=10, top=Math.ceil(m.Imax/100)*100;
     const X=x=>x0+x*(x1-x0), Y=v=>y0-v/top*(y0-y1);
     ctx.font='11px "PingFang SC","Microsoft YaHei UI","Noto Sans SC",sans-serif'; ctx.strokeStyle='#e4e2dc'; ctx.fillStyle='#5b616a'; ctx.lineWidth=1;
@@ -270,38 +356,52 @@ const PL = (() => {
   }
 
   /* ---------- AI 批改 ---------- */
-  function offline(c){
-    const m=c.m, p=[], good=c.g.filter(x=>x.n>=2), one=c.g.filter(x=>x.n<2);
-    if (m.n<12) p.push(`马吕斯定律只记了 ${m.n} 个点，建议每 10°～15° 记一次、记满半圈以上`);
-    if (m.r2<0.999) p.push(`拟合的 R² 只有 ${m.r2.toFixed(4)}，有个别点可能读错了`);
-    if (c.e && Math.abs(c.e.off)>1) p.push(`记录波片消光位置时，波片光轴和起偏器差了约 ${Math.abs(c.e.off).toFixed(1)}°，后面各角度 α 都会带上这个偏差`);
-    if (c.e && Math.abs(c.e.cross)>2) p.push(`找波片消光位置时检偏器并没有和起偏器正交（差 ${Math.abs(c.e.cross).toFixed(1)}°），可能是转了检偏器而不是波片，这样定出的光轴方向不对`);
-    if (c.e && c.e.I/I0>0.008) p.push(`波片消光位置的光强 ${c.e.I} µW 偏大，可能没有转到最小`);
-    const notCross=good.filter(x=>!x.crossOK);
-    if (notCross.length) p.push(`α = ${notCross.map(x=>x.alpha).join('°、')}° 时记录的最大、最小光强对应的检偏器角度相差不到 60°，可能没有真正找到极值（应相差约 90°）`);
-    if (one.length) p.push(`α = ${one.map(x=>x.alpha).join('°、')}° 只记了一次光强，求不出 I_min/I_max`);
-    if (c.g.length && good.length<5) p.push(`波片只测了 ${good.length} 个角度，建议从 0° 到 90° 每隔 15° 测一次`);
-    const g45=good.find(x=>Math.abs(Math.abs(x.alpha)-45)<=3);
-    const right=s.guess&&s.guess===s.type;
-    const plate = good.length ? `波片部分：${g45?`α ≈ 45° 时 I_min/I_max = ${g45.ratio.toFixed(3)}，`:''}这片实际是${TYPE[s.type]}，你的判断${s.guess?(right?'正确':'不对'):'还没有填写'}。${s.type==='q'?'λ/4 波片在 45° 时出射圆偏振光，比值接近 1；其他角度比值约为 tan²α。':'λ/2 波片出射始终是线偏振光，比值接近 0，振动方向转过 2α。'}` : '还没有做进阶的波片部分。';
-    return [`【总评】拟合得到检偏器与起偏器平行时的读数 θ∥ = ${Unc.format(m.par,m.u,'°').text.replace(') °',')°')}，与真实值相差 ${m.err.toFixed(2)}°；R² = ${m.r2.toFixed(5)}，消光比 ${(m.ratio*100).toFixed(2)}%，数据很好地符合马吕斯定律。${plate}`,
+  function malusFeedback(m){
+    const p=[];
+    if (m.n<12) p.push(`只记了 ${m.n} 个点，建议每 10°～15° 记一次、记满半圈`);
+    if (m.r2<0.999) p.push(`拟合的 R² 只有 ${m.r2.toFixed(4)}，请检查个别读数`);
+    const conclusion=m.r2>=0.999?'数据很好地符合马吕斯定律。':'请根据残差复核数据与马吕斯定律的一致性。';
+    return [`【总评】θ∥ = ${Unc.format(m.par,m.u,'°').text}，与真实值相差 ${Math.abs(m.err).toFixed(2)}°；R² = ${m.r2.toFixed(5)}，消光比 ${(m.ratio*100).toFixed(2)}%。${conclusion}`,
       '【数据问题】'+(p.length?p.join('；')+'。':'没有发现明显问题。'),
-      '【误差来源】激光功率的缓慢起伏、偏振片不能完全消光（I_min 不为零）、转盘游标读数误差（0.1°）、找光强极值时检偏器没有转到正好的位置，以及波片相位延迟与标称值有偏差。',
-      '【改进建议】在消光和光强最大附近用微调；记录点均匀分布在一整圈上，用最小二乘而不是只用两三个点求 θ∥；测波片时每个角度都转检偏器找到真正的最大、最小值；判断波片类型重点看 α = 45° 的结果。'].join('\n');
+      '【误差来源】激光功率缓慢起伏、偏振片不能完全消光、转盘游标的读数误差。',
+      '【改进建议】均匀取点；在消光和光强最大的位置附近用微调。'].join('\n');
   }
-  function review(){
-    const c=calc();
-    runReview(P,{
-      check:()=>c.m?'':'马吕斯定律至少需要 8 个点，并且相邻两点的角度间隔不超过 45°（对 180° 取模后）。',
-      prompt:()=>`你是大学物理光学实验课的助教，正在批改大一学生“马吕斯定律与波片”的实验数据。He-Ne 激光（632.8 nm）经起偏器后为线偏振光，检偏器转盘的零点没有对准起偏器。
-马吕斯定律数据（检偏器读数 θ/°，光强 I/µW）：${c.m?s.rows.filter(r=>r.t==='m').map(r=>`(${r.th}, ${r.I})`).join(' '):''}
-最小二乘拟合 I = I_min + (I_max − I_min)cos²(θ − θ∥)：I_max = ${c.m.Imax.toFixed(1)} µW，I_min = ${c.m.Imin.toFixed(2)} µW，消光比 ${(c.m.ratio*100).toFixed(2)}%，R² = ${c.m.r2.toFixed(5)}，θ∥ = ${c.m.par.toFixed(2)}°，不确定度 ${c.m.u.toFixed(2)}°；真实 θ∥ = ${s.t0.toFixed(2)}°（模 180°），相差 ${c.m.err.toFixed(2)}°。
-${c.e?`进阶波片部分：正交偏振器间放入未知波片，消光时波片读数 ${c.e.a}°（此时波片光轴与起偏器实际相差 ${c.e.off}°，检偏器偏离正交 ${c.e.cross}°，学生看不到），光强 ${c.e.I} µW。
-各角度（α 为相对消光位置转过的角度）：${c.g.map(x=>`α=${x.alpha}°：记 ${x.n} 次，I_max=${x.Imax}，I_min=${x.Imin}，比值 ${x.ratio.toFixed(3)}，长轴方向 ${x.major}°（理论比值 ${x.th.ratio.toFixed(3)}，理论长轴 ${x.th.major.toFixed(1)}°）`).join('；')}。
-这片实际是${TYPE[s.type]}（相位延迟 ${s.delta.toFixed(1)}°），学生的判断：${s.guess?TYPE[s.guess]:'没有填写'}。`:'学生还没有做进阶的波片部分。'}
-请给出批改意见：中文，250~350 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。说明数据是否符合马吕斯定律；如果做了波片部分，说明判断依据（特别是 α = 45° 时的比值和长轴方向的变化）以及学生的判断是否正确，并指出只测光强分不出快轴和慢轴。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
-      offline:()=>offline(c)
-    }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
+  function plateFeedback(c,good){
+    const g45=near45(good), skipped=c.g.filter(x=>!x.valid);
+    return [`【总评】α ≈ 45° 时 I_min/I_max = ${g45.ratio.toFixed(3)}。这片是${TYPE[s.type]}，你的判断${s.guess===s.type?'正确':'不对'}。`,
+      skipped.length?`【数据问题】α = ${skipped.map(x=>x.alpha).join('°、')}° 的读数未构成有效极值。`:'【数据问题】所用角度均记录了有效极值。',
+      '【误差来源】功率起伏、游标读数、波片相位延迟与标称值的偏差。',
+      '【改进建议】'+(s.type==='q'?QUARTER_RATIO:'理想 λ/2 波片的线偏振方向转过 2α。')+'只测光强无法区分快轴和慢轴。'].join('\n');
+  }
+  async function review(){
+    if ($('#'+P+'-check').disabled) return;
+    const plateMode=s.mode==='plate', c=calc(), good=c.g.filter(x=>x.valid);
+    const controls=[...document.querySelectorAll('#'+P+'-modes button'),$('#'+P+'-guess')];
+    controls.forEach(b=>b.disabled=true);
+    try {
+      const text=await runReview(P,{
+        check:()=>plateMode?checkPlate(c.e,good):c.m?'':'马吕斯定律至少需要 8 个点，并且相邻两点的角度间隔不超过 45°（对 180° 取模后）。',
+        prompt:()=>plateMode
+          ?`你是物理光学实验课的助教。只批改未知波片鉴别。
+波片消光位置的报告：波片 ${c.e.a}°，检偏器 ${c.e.th}°，光强 ${c.e.I} µW。
+有效测量：${good.map(x=>`α=${x.alpha}°：I_max=${x.Imax} µW，I_min=${x.Imin} µW，比值 ${x.ratio.toFixed(3)}（理论 ${x.th.ratio.toFixed(3)}），长轴 ${x.major==null?'在近圆偏振时不确定':x.major+'°'}`).join('；')}。
+未通过极值检查的角度：${c.g.filter(x=>!x.valid).map(x=>x.alpha+'°').join('、')||'无'}。
+实际是${TYPE[s.type]}（相位延迟 ${s.delta.toFixed(1)}°），学生判断为${TYPE[s.guess]}。说明 45° 附近的判断依据，并提醒只测光强分不出快轴和慢轴。${QUARTER_RATIO}
+用中文分四段，段首依次为【总评】【数据问题】【误差来源】【改进建议】，只根据给出的数据批改。`
+          :`你是物理光学实验课的助教。只批改马吕斯定律。
+检偏器读数 θ/° 与光强 I/µW：${s.rows.filter(r=>r.t==='m').map(r=>`(${r.th}, ${r.I})`).join(' ')}。
+拟合结果：I_max = ${c.m.Imax.toFixed(1)} µW，I_min = ${c.m.Imin.toFixed(2)} µW，消光比 ${(c.m.ratio*100).toFixed(2)}%，R² = ${c.m.r2.toFixed(5)}，θ∥ = ${c.m.par.toFixed(2)}°，不确定度 ${c.m.u.toFixed(2)}°。真实 θ∥ = ${s.t0.toFixed(2)}°（模 180°）。
+用中文分四段，段首依次为【总评】【数据问题】【误差来源】【改进建议】，只根据给出的数据批改。`,
+        offline:()=>plateMode?plateFeedback(c,good):malusFeedback(c.m)
+      });
+      if (text){
+        if (plateMode) s.plateReview=text;
+        else { s.checked=true; s.review=text; }
+        table(); render();
+      }
+    } finally {
+      controls.forEach(b=>b.disabled=false);
+    }
   }
   return {mount, render, key};
 })();
