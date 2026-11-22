@@ -26,5 +26,50 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert(Math.abs(vm.runInContext('MI.calc().mean',labs)-632.8)<1e-6);
  vm.runInContext(`const phi=Math.asin(546.1/(1e6/600))*180/Math.PI; SP.s.rows=[{n:1,k:1,L:180+phi,R:phi},{n:1,k:-1,L:180-phi,R:360-phi}]`,labs);
  assert(Math.abs(vm.runInContext('SP.calc().mean',labs)-1e6/600)<1e-6);
- console.log('Frontend regression checks passed (syntax, tab sync, schema, concurrency, invalid data, ideal results).');
+ const readings=(k,left,right)=>[
+  {side:'L',k,x:left,off:0},
+  {side:'R',k,x:right,off:0},
+ ];
+ const newtonCalc=rows=>{
+  labs.newtonRows=rows;
+  return vm.runInContext('NR.s.rows=newtonRows; NR.calc()',labs);
+ };
+ const inner=readings(21,21.500,28.500);
+ const normal=[...inner,...readings(26,21.000,29.000)];
+ const valid=newtonCalc(normal);
+ assert.equal(valid.validCount,1);
+ assert.equal(valid.invalid.length,0);
+ assert.equal(valid.items[0].R.toFixed(3),'1.273');
+ assert.equal(valid.mean.toFixed(3),'1.273');
+
+ for(const [left,right,diameter,difference] of [
+  [21.500,28.500,7,0],
+  [22.000,28.000,6,-13],
+ ]){
+  const invalid=newtonCalc([...inner,...readings(26,left,right)]);
+  assert.equal(invalid.validCount,0);
+  assert.deepStrictEqual(Array.from(invalid.invalid,x=>({...x})),[
+   {m:26,n:21,Dm:diameter,Dn:7,squaredDifference:difference},
+  ]);
+  assert(!('mean' in invalid));
+  assert(!('err' in invalid));
+ }
+
+ const mixed=newtonCalc([...normal,...readings(22,21.500,28.500),...readings(27,22.000,28.000)]);
+ assert.equal(mixed.validCount,1);
+ assert.equal(mixed.mean,valid.mean);
+ assert.equal(mixed.err,valid.err);
+ assert.deepStrictEqual(Array.from(mixed.invalid,x=>({...x})),[
+  {m:27,n:22,Dm:6,Dn:7,squaredDifference:-13},
+ ]);
+
+ const equalDiameters=newtonCalc([...readings(21,21.123,28.877),...readings(26,20.123,27.877)]);
+ assert.equal(equalDiameters.validCount,0);
+ assert.deepStrictEqual(Array.from(equalDiameters.invalid,x=>({...x})),[
+  {m:26,n:21,Dm:7.754,Dn:7.754,squaredDifference:0},
+ ]);
+ const incomplete=newtonCalc(normal.slice(0,-1));
+ assert.equal(incomplete.validCount,0);
+ assert.equal(incomplete.invalid.length,0);
+ console.log('Frontend regression checks passed (including Newton rings valid, invalid, mixed, and incomplete readings).');
 })().catch(e=>{console.error(e);process.exitCode=1});

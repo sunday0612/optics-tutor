@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -100,6 +100,7 @@ const LabStore = {
       if(keys.every(k=>k in saved && (typeof s[k]!=='number' || Number.isFinite(saved[k])))) {
         for(const k of keys) s[k]=saved[k];
         s.review=typeof saved.review==='string'?saved.review:'';
+        return saved;
       }
     }
   },

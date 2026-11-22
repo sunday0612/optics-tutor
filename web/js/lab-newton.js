@@ -6,7 +6,7 @@ const NR = (() => {
   const P='nr', LAM=589.3e-6;          // 钠光波长 (mm)
   const FOV=2.4, DIV=0.01, BACKLASH=0.03;
   const SEQ=[...Array(10)].map((_,i)=>({side:'L',k:30-i})).concat([...Array(10)].map((_,i)=>({side:'R',k:21+i})));
-  const s={}; let B=null;
+  const s={}; let B=null, retake=[];
 
   function init(){
     const Xc=rnd(24.2,25.8), X=Xc+rnd(-1.2,1.2);
@@ -47,7 +47,12 @@ const NR = (() => {
           <div class="tip">按住按钮转动测微鼓轮（1 格 = 0.01 mm），也可以拖动刻度条；键盘 ← → 每次 1 格（Shift 为 10 格）。</div>
         </div>
       </div>`});
-    init(); LabStore.restore(P,s); stats.records+=s.rows.length; $('#'+P+'-review').innerHTML=paras(s.review||'');
+    init();
+    const saved=LabStore.restore(P,s);
+    retake=Array.isArray(saved?.retake)?saved.retake:[];
+    stats.records+=s.rows.length;
+    if (calc().invalid.length) clearReview();
+    $('#'+P+'-review').innerHTML=paras(s.review||'');
     B=benchArea(P, Models3D.newton, ()=>({dx:s.A-s.Xc, y0:s.y0, drum:((s.X*100)%100+100)%100, focus:s.focus}),
       {cap3d:'三维模型（显微镜和装置的移动量已放大显示）'});
     B.onChange=render;
@@ -59,9 +64,20 @@ const NR = (() => {
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-drum'), 8, d=>{ turn(d); render(); });
     $('#'+P+'-rec').onclick=record;
-    $('#'+P+'-undo').onclick=()=>{ s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; if (s.rows.pop()) stats.records--; if(!s.rows.length) s.reversals=0; table(); render(); };
-    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.reversals=0; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; table(); render(); };
+    $('#'+P+'-undo').onclick=()=>{ clearReview(); if (s.rows.pop()) stats.records--; if(!s.rows.length) s.reversals=0; table(); render(); };
+    $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; retake=[]; s.reversals=0; clearReview(); table(); render(); };
     $('#'+P+'-check').onclick=review;
+    $('#'+P+'-result').onclick=e=>{
+      const button=e.target.closest('button[data-retake]');
+      if (!button) return;
+      const m=Number(button.dataset.retake), n=m-5;
+      retake=[...new Set([...retake,m,n])];
+      const count=s.rows.length;
+      s.rows=s.rows.filter(r=>r.k!==m&&r.k!==n);
+      stats.records-=count-s.rows.length;
+      clearReview(); table(); render();
+      $('#'+P+'-rec').focus();
+    };
     table();
   }
   function key(dir,big){ turn(dir*(big?10:1)); render(); }
@@ -74,7 +90,7 @@ const NR = (() => {
     const main=Math.floor(s.X+1e-9), d=(s.X-main)*100;
     $('#'+P+'-readout').innerHTML=`<div>读数显微镜读数</div><div class="v">${s.X.toFixed(3)} mm</div><div class="f">= 主尺 ${main} mm + 测微鼓轮 ${d.toFixed(1)} × 0.01 mm</div>`;
     $('#'+P+'-of').textContent=sharp()?'清晰':'模糊'; $('#'+P+'-oy').textContent=inCenter()?'已对中':'偏离';
-    const next=SEQ[s.rows.length];
+    const next=nextReading();
     $('#'+P+'-rec').textContent = next ? `记录：${next.side==='L'?'左':'右'}侧第 ${next.k} 暗环` : '已记满 20 个';
     renderSteps(P,[
       [s.focused,'<b>调焦</b>：转动调焦手轮，直到干涉环清晰。'],
@@ -118,13 +134,26 @@ const NR = (() => {
   }
 
   /* ---------- 数据 ---------- */
+  function clearReview(){
+    s.checked=false;
+    s.review='';
+    $('#'+P+'-review').innerHTML='';
+  }
+  function save(){
+    LabStore.save(P,{...s,retake});
+  }
+  function nextReading(){
+    const readings=byK();
+    const missing=SEQ.filter(({k,side})=>readings[k]?.[side]==null);
+    return missing.find(({k})=>retake.includes(k))||missing[0];
+  }
   function record(){
-    const next=SEQ[s.rows.length];
+    const next=nextReading();
     if (!next) return;
     if (!s.focused||!s.centered){ $('#'+P+'-result').innerHTML='<div class="note">先完成调焦和对中，再开始记录。</div>'; return; }
     const id=ideal(next.side,next.k), est=Math.round(rnd(-1.4,1.4))*1e-3;
     s.rows.push({...next, x:+(s.X+est).toFixed(3), off:id==null?null:+(s.A-id).toFixed(4)});
-    s.checked=false; s.review=''; $('#'+P+'-review').innerHTML='';
+    clearReview();
     stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row:s.rows[s.rows.length-1]}); table(); render();
   }
   function byK(){
@@ -132,22 +161,56 @@ const NR = (() => {
     return m;
   }
   function calc(){
-    const m=byK(), D={}; for (const k in m) if (m[k].L!=null&&m[k].R!=null) D[k]=Math.abs(m[k].R-m[k].L);
-    const items=[]; for (let k=26;k<=30;k++) if (D[k]!=null&&D[k-5]!=null) items.push({m:k,n:k-5,R:(D[k]**2-D[k-5]**2)/(4*5*LAM)/1000});
-    if (!items.length) return {D,items};
-    const mean=items.reduce((a,b)=>a+b.R,0)/items.length;
-    return {D,items,mean,err:(mean-s.Rtrue/1000)/(s.Rtrue/1000)*100};
+    const readings=byK(), diametersUm={}, D={};
+    for (const [k,{L,R}] of Object.entries(readings)){
+      if (L==null||R==null) continue;
+      diametersUm[k]=Math.abs(Math.round(R*1000)-Math.round(L*1000));
+      D[k]=diametersUm[k]/1000;
+    }
+    const items=[], invalid=[];
+    for (let m=26;m<=30;m++){
+      const n=m-5;
+      if (D[m]==null||D[n]==null) continue;
+      // 先用整数微米的平方作差，避免相同的直径出现浮点残差。
+      const squaredDifferenceUm2=diametersUm[m]**2-diametersUm[n]**2;
+      const squaredDifference=squaredDifferenceUm2/1e6;
+      if (squaredDifferenceUm2<=0){
+        invalid.push({m,n,Dm:D[m],Dn:D[n],squaredDifference});
+        continue;
+      }
+      items.push({m,n,R:squaredDifference/(4*(m-n)*LAM)/1000});
+    }
+    const validCount=items.length;
+    if (!validCount) return {D,items,invalid,validCount};
+    const mean=items.reduce((a,b)=>a+b.R,0)/validCount;
+    return {D,items,invalid,validCount,mean,err:(mean-s.Rtrue/1000)/(s.Rtrue/1000)*100};
   }
   function table(){
-    LabStore.save(P,s);
+    save();
     renderStats();
     if (!s.rows.length){ $('#'+P+'-table').innerHTML='<div class="empty">还没有数据。调好焦、对好中心后，按步骤 3 的顺序记录。</div>'; $('#'+P+'-result').innerHTML=''; return; }
     const m=byK(), c=calc(), ks=Object.keys(m).map(Number).sort((a,b)=>b-a);
+    const invalidLevels=new Set(c.invalid.flatMap(({m,n})=>[m,n]));
     $('#'+P+'-table').innerHTML=`<table class="data"><tr><th>级次 k</th><th>左侧 x / mm</th><th>右侧 x / mm</th><th>D<sub>k</sub> / mm</th><th>D<sub>k</sub>² / mm²</th></tr>`+
-      ks.map(k=>`<tr><td>${k}</td><td>${m[k].L!=null?m[k].L.toFixed(3):'—'}</td><td>${m[k].R!=null?m[k].R.toFixed(3):'—'}</td><td>${c.D[k]!=null?c.D[k].toFixed(3):'—'}</td><td>${c.D[k]!=null?(c.D[k]**2).toFixed(3):'—'}</td></tr>`).join('')+'</table>';
-    $('#'+P+'-result').innerHTML = c.items.length ? `<div class="result">逐差法（m − n = 5）：${c.items.map(x=>`R(${x.m},${x.n}) = ${x.R.toFixed(3)}`).join('，')} m
-        <div>平均曲率半径 <span class="big">${c.mean.toFixed(3)} m</span>　本台装置参考值 ${(s.Rtrue/1000).toFixed(3)} m　相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(2)}%</b></div></div>`
-      : '<div class="hint" style="margin-top:8px">左右两侧都记到相差 5 级的两个环后，自动用逐差法计算 R。</div>';
+      ks.map(k=>`<tr${invalidLevels.has(k)?' class="warn"':''}><td>${k}</td><td>${m[k].L!=null?m[k].L.toFixed(3):'—'}</td><td>${m[k].R!=null?m[k].R.toFixed(3):'—'}</td><td>${c.D[k]!=null?c.D[k].toFixed(3):'—'}</td><td>${c.D[k]!=null?(c.D[k]**2).toFixed(3):'—'}</td></tr>`).join('')+'</table>';
+    const warnings=c.invalid.map(({m,n,Dm,Dn,squaredDifference})=>{
+      const magnitude=Math.abs(squaredDifference);
+      const difference=magnitude===0?'0':`−${magnitude.toFixed(magnitude<0.001?6:3)} mm²`;
+      return `<div class="note">
+        <div>第 ${m} 级与第 ${n} 级：D<sub>${m}</sub> = ${Dm.toFixed(3)} mm，D<sub>${n}</sub> = ${Dn.toFixed(3)} mm，直径平方差为 ${difference}，应为正。请重测这两级。</div>
+        <button type="button" class="ghost" data-retake="${m}">重测第 ${m} 级和第 ${n} 级</button>
+      </div>`;
+    }).join('');
+    let result='<div class="hint" style="margin-top:8px">左右两侧都记到相差 5 级的两个环后，自动用逐差法计算 R。</div>';
+    if (c.validCount){
+      const countNote=c.invalid.length?`<div class="hint">已剔除 ${c.invalid.length} 组无效数据，平均值基于 ${c.validCount} 组。</div>`:'';
+      result=`<div class="result">逐差法（m − n = 5）：${c.items.map(x=>`R(${x.m},${x.n}) = ${x.R.toFixed(3)}`).join('，')} m
+        <div>平均曲率半径 <span class="big">${c.mean.toFixed(3)} m</span>　本台装置参考值 ${(s.Rtrue/1000).toFixed(3)} m　相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(2)}%</b></div>
+        ${countNote}</div>`;
+    } else if (c.invalid.length) {
+      result='<div class="hint">重测后给出平均值。</div>';
+    }
+    $('#'+P+'-result').innerHTML=result+warnings;
   }
 
   /* ---------- AI 批改 ---------- */
@@ -169,7 +232,13 @@ const NR = (() => {
   function review(){
     const c=calc();
     runReview(P,{
-      check:()=>c.items.length?'':'至少要有一组相差 5 级、左右两侧都记录了的数据才能检查。',
+      check:()=>{
+        if (c.invalid.length){
+          const levels=c.invalid.map(({m,n})=>`第 ${m} 级与第 ${n} 级`).join('、');
+          return `${levels}的数据无效，请先重测再检查。`;
+        }
+        return c.validCount?'':'至少要有一组相差 5 级、左右两侧都记录了的数据才能检查。';
+      },
       prompt:()=>`你是大学物理实验课的助教，正在批改大一学生“牛顿环测平凸透镜曲率半径”的实验数据。钠光 λ = 589.3 nm，本台装置参考值 R = ${(s.Rtrue/1000).toFixed(3)} m。
 学生的记录（级次 k，左侧读数，右侧读数，单位 mm）：
 ${Object.entries(byK()).sort((a,b)=>b[0]-a[0]).map(([k,v])=>`k=${k}: 左 ${v.L!=null?v.L.toFixed(3):'未记'}，右 ${v.R!=null?v.R.toFixed(3):'未记'}`).join('\n')}
@@ -177,7 +246,7 @@ ${Object.entries(byK()).sort((a,b)=>b[0]-a[0]).map(([k,v])=>`k=${k}: 左 ${v.L!=
 系统记录的操作情况：记录过程中鼓轮反转 ${s.reversals} 次；每次记录时叉丝偏离对应暗环中心的距离（μm，正为偏右）：${s.rows.map(r=>`${r.side==='L'?'左':'右'}${r.k}:${r.off==null?'?':Math.round(r.off*1000)}`).join('，')}。该处相邻暗环间距约 70 μm，偏离超过 35 μm 说明很可能数错了环。
 请给出批改意见：中文，200~300 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。要点名具体是哪几个环有问题。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
-    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; LabStore.save(P,s); render(); } });
+    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; save(); render(); } });
   }
   return {mount, render, key};
 })();
