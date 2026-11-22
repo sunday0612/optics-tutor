@@ -1,6 +1,6 @@
 /* =====================================================================
- * models3d.js —— 三个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
- *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）
+ * models3d.js —— 四个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
+ *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗
  * 每个模型返回 update()，在实验状态变化时调用：部件会跟着操作移动或转动。
  * 观察者默认站在 −z 一侧（“前方”）。
  * ===================================================================== */
@@ -298,5 +298,127 @@ const Models3D = (() => {
   }
   spectrometer.camera={target:[0,12,0], dist:92, theta:-1.0, phi:0.98, minDist:22, maxDist:200};
 
-  return {michelson, newton, spectrometer};
+  /* =================================================================
+   * 4. 光纤耦合与弯曲损耗
+   *   光轴沿 x；调整架 X 轴 = 世界 z，Y 轴 = 世界 y，Z 轴（调焦）= 世界 x
+ *   这个模型的观察者站在 +z 一侧，光从左向右传播
+   * ================================================================= */
+  const sphere=lathe(Array.from({length:9},(_,i)=>{ const a=-PI/2+i*PI/8; return [Math.cos(a),Math.sin(a)]; }),16);
+  /* 任意方向的细圆柱：局部 y 轴对准 a→b */
+  function setSeg(n, a, b){
+    const d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], len=Math.hypot(...d)||1e-3, u=d.map(x=>x/len), sx=Math.sqrt(Math.max(0,1-u[1]*u[1]));
+    n.pos=[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2]; n.rot=[Math.acos(clamp(u[1],-1,1)), sx<1e-6?0:Math.atan2(u[0],u[2]), 0]; n.scl=[n.r,len,n.r]; n.visible=true;
+  }
+  /* Catmull-Rom 平滑折线 */
+  function smooth(pts, k=5){
+    const o=[pts[0]];
+    for (let i=0;i<pts.length-1;i++){ const p0=pts[Math.max(0,i-1)], p1=pts[i], p2=pts[i+1], p3=pts[Math.min(pts.length-1,i+2)];
+      for (let j=1;j<=k;j++){ const t=j/k, t2=t*t, t3=t2*t;
+        o.push([0,1,2].map(c=>0.5*(2*p1[c]+(-p0[c]+p2[c])*t+(2*p0[c]-5*p1[c]+4*p2[c]-p3[c])*t2+(-p0[c]+3*p1[c]-3*p2[c]+p3[c])*t3))); } }
+    return o;
+  }
+  function lcdTex(v){ const c=cv(512,128); return {c, t:v.texture(c,true)}; }
+  function fiber(v, S){
+    const R=v.root, Y=8, K=0.06;                                     // 光轴高度；调整架位移放大：1 µm → 0.06 cm
+    table(R, 140, 70);
+    R.add(shadow(40,10,-38,0), shadow(16,14,-1,0), shadow(36,12,30,-6), shadow(18,10,46,-16));
+    /* He-Ne 激光器 */
+    const laser=new Node();
+    laser.add(cylX(2.3,34,mat({color:'#2c3440',spec:0.45,shin:40}),-40,Y,0), cylX(2.45,1.2,MAT.chrome,-22.8,Y,0), cylX(2.45,1.2,MAT.chrome,-57.2,Y,0),
+      cylX(0.7,1,MAT.anod,-21.8,Y,0), N(disc(0.22,0,20),MAT.led).at(-21.25,Y,0).rotate(0,0,-PI/2));
+    for (const x of [-50,-30]) laser.add(boxN(3,Y-2.6,4,MAT.cast,x,(Y-2.6)/2,0), boxN(4.4,1.4,5,MAT.castHi,x,Y-2.4,0));
+    R.add(laser);
+    const b1=beam(MAT.red,0.12); R.add(b1); setBeam(b1,[-21.3,Y,0],[-12.2,Y,0]);
+    /* 20× 显微物镜 + 支架 */
+    const obj=alongX(N(lathe([[1.15,0],[1.15,2.6],[1.25,2.7],[1.25,3.2],[0.85,3.6],[0.55,4.4],[0.35,4.7]],40),MAT.chrome)).at(-12,Y,0);
+    const objMount=new Node(); objMount.add(boxN(1,6,4,MAT.anod,-12.6,Y-1,0), cylY(0.6,Y-4,MAT.steel,-12.6,(Y-4)/2,0), boxN(4,0.8,5,MAT.cast,-12.6,0.4,0), N(torus(1.2,0.15,40,8),MAT.knob).at(-10.6,Y,0).rotate(0,0,PI/2));
+    R.add(obj, objMount);
+    const cone=beam(mat({color:'#ff2a1a',unlit:true,opacity:0.5,additive:true}),0.05); R.add(cone);
+    /* 三维光纤调整架 */
+    R.add(boxN(12,2,9,MAT.cast,0,1,0));
+    const carZ=new Node(), carX=new Node(), carY=new Node();     // 调焦（x）→ 左右（z）→ 上下（y）
+    carZ.add(boxN(10,1.6,8,MAT.castHi,0,2.8,0));
+    carX.add(boxN(8,1.6,7,MAT.cast,0,4.4,0));
+    carY.add(boxN(2,Y-4.4,6,MAT.castHi,1.5,(Y+5.2)/2,0), boxN(6,1.4,2.2,MAT.anod,-1.6,Y,0), boxN(6.2,0.5,2.4,MAT.alu,-1.6,Y+0.95,0),
+      N(disc(0.2,0,16),glow('#ff5a3c',0.9)).at(-4.72,Y,0).rotate(0,0,PI/2));
+    carX.add(carY); carZ.add(carX); R.add(carZ);
+    const mic=()=>{ const g=new Node(); const thimble=knob(v,0.9,2.4,MAT.chrome); g.add(N(cylinder(0.55,0.55,3,24),MAT.steel).at(0,1.5,0), thimble.at(0,3.6,0)); return {g,th:thimble}; };
+    const mX=mic(), mY=mic(), mZ=mic();
+    mX.g.rot=[PI/2,0,0]; mX.g.pos=[0,4.4,3.6];                  // 指向观察者（+z）
+    mY.g.rot=[0,0,0]; mY.g.pos=[1.5,Y+0.4,-1.8];                  // 竖直向上
+    mZ.g.rot=[0,0,-PI/2]; mZ.g.pos=[5,2.8,0];                    // 指向 +x
+    carX.add(mX.g); carY.add(mY.g); carZ.add(mZ.g);
+    /* 弯曲圆柱 */
+    R.add(boxN(36,0.8,6,MAT.anod,30,0.4,-7));
+    const RADII=[3.5,4,4.5,5,5.5,6,6.5,7], rods=RADII.map((r,k)=>{ const x=16+k*4.2, n=cylY(r/10,4.6,MAT.alu,x,0.8+2.3,-7); R.add(n, cylY(r/10*1.02,0.08,MAT.anod,x,5.42,-7)); return {x,r:r/10,n}; });
+    /* 输出端光纤夹持器、探头、功率计 */
+    R.add(boxN(4,1.2,2.2,MAT.anod,54,Y,0), cylY(0.6,Y-0.6,MAT.steel,54,(Y-0.6)/2,0), boxN(4,0.8,5,MAT.cast,54,0.4,0));
+    const det=new Node();
+    det.add(cylX(1.7,2.4,MAT.anod,59.4,Y,0), N(disc(1.2,0,32),mat({color:'#1a1a1f',spec:0.9,shin:90})).at(58.18,Y,0).rotate(0,0,PI/2), cylY(0.6,Y-1.7,MAT.steel,59.6,(Y-1.7)/2,0), boxN(4,0.8,5,MAT.cast,59.6,0.4,0));
+    R.add(det);
+    const meterBox=new Node().at(47,0,-17);
+    const lcd=lcdTex(v);
+    meterBox.add(boxN(17,8,7,mat({color:'#3a3f46',spec:0.3}),0,4,0), boxN(17.4,0.6,7.4,MAT.anod,0,0.3,0),
+      N(plane(11,2.75),mat({color:'#ffffff',unlit:true,map:lcd.t})).at(-1.5,5.2,3.52).rotate(PI/2,0,0),
+      knob(v,0.8,0.6).at(6,5.2,3.7).rotate(PI/2,0,0), knob(v,0.5,0.6).at(6,2.6,3.7).rotate(PI/2,0,0));
+    R.add(meterBox);
+    const cable=[]; for (let i=0;i<8;i++){ const n=beam(mat({color:'#111214',spec:0.3}),0.18); n.visible=false; cable.push(n); R.add(n); }
+    const cpts=smooth([[60.8,Y,0],[63,Y-1,-2],[62,1,-8],[56,0.5,-14],[52,2,-14]],2);
+    for (let i=0;i<cpts.length-1&&i<cable.length;i++){ cable[i].r=0.18; setSeg(cable[i],cpts[i],cpts[i+1]); }
+    /* 远场白屏（选做时出现） */
+    const screen=new Node();
+    screen.add(boxN(0.25,7,7,mat({color:'#e9e7e1',spec:0.1}),0,Y,0), cylY(0.5,Y-3.5,MAT.steel,0.5,(Y-3.5)/2,0), boxN(3,0.8,4,MAT.cast,0.5,0.4,0));
+    const spot=N(disc(1,0,32),glow('#ff3a20',0.85)).rotate(0,0,PI/2); screen.add(spot);
+    R.add(screen);
+    const outCone=N(cylinder(1,0.03,1,24,false),mat({color:'#ff2a1a',unlit:true,opacity:0.16,additive:true})); R.add(outCone);
+    /* 光纤：固定数量的细圆柱，按路径摆放 */
+    const jacket=mat({color:'#e6c13a',spec:0.45,shin:36}), glowM=mat({color:'#ff2a14',unlit:true,opacity:0.5,additive:true});
+    const segs=[], gsegs=[], joints=[];
+    for (let i=0;i<260;i++){ const n=beam(jacket,0.14); n.visible=false; segs.push(n); R.add(n); }
+    for (let i=0;i<150;i++){ const n=beam(glowM,0.34); n.visible=false; gsegs.push(n); R.add(n); }
+    /* 标注 */
+    const L=(t,n,o)=>v.label(t,n,o);
+    L('He-Ne 激光器',laser.children[0],[0,3,0]); L('20× 物镜',obj,[0,2,0]); L('三维光纤调整架',carZ.children[0],[0,-1,5]); L('光纤端面',carY.children[1],[0,-2.4,1.4]);
+    L('弯曲圆柱（R = 3.5～7 mm）',rods[3].n,[2,3.2,0]); L('光功率计',meterBox.children[0],[0,4.8,0]); L('探头',det,[59.4,Y+2.4,0]);
+    L('白屏',screen,[0,Y+4.2,0]);
+    const segLabel=new Node(); R.add(segLabel); L('单模光纤',segLabel,[0,0,0]);
+    return function update(){
+      const s=S();
+      const dz=clamp(s.x*K,-2.4,2.4), dy=clamp(s.y*K,-1.6,1.6), dx=clamp(s.z*0.012,-1.8,1.8);
+      carZ.pos=[dx,0,0]; carX.pos=[0,0,dz]; carY.pos=[0,dy,0];
+      mX.th.rot=[0,s.x*0.3,0]; mY.th.rot=[0,s.y*0.3,0]; mZ.th.rot=[0,s.z*0.05,0];
+      const tip=[-4.7+dx,Y+dy,dz];
+      setBeam(cone,[-7.3,Y,0],[-5.2,Y,0]);
+      /* 光纤路径 */
+      const p=[tip,[-1.6+dx,Y+dy,dz],[2+dx,Y+dy-0.3,dz],[6,Y-3,2.5],[9,0.5,4],[13,0.25,4]];
+      let helix=[];
+      const k=s.wound?s.radii.indexOf(s.wR):-1;
+      if (k>=0){ const rod=rods[k], rr=rod.r+0.07, n=s.wN, per=14;
+        p.push([rod.x-2.2,0.25,4],[rod.x-0.6,0.9,-7+rr+0.6]);
+        for (let i=0;i<=n*per;i++){ const a=-PI/2+i/per*2*PI; helix.push([rod.x-rr*Math.cos(a), 1.1+i/per*0.32, -7-rr*Math.sin(a)]); }
+        p.push(...helix.slice(0,1)); }
+      const tail=[[47,0.25,4],[50.5,2,2.5],[51.6,Y,0],[56,Y,0]];
+      let pts=smooth(p,4);
+      if (k>=0){ const rod=rods[k]; pts=pts.concat(helix.slice(1)); const end=helix[helix.length-1]; pts=pts.concat(smooth([end,[rod.x+0.6,end[1]-0.2,-7+rod.r+0.6],[rod.x+2.2,0.25,4],...tail],4).slice(1)); }
+      else pts=pts.concat(smooth([p[p.length-1],...tail],4).slice(1));
+      segs.forEach(n=>n.visible=false); gsegs.forEach(n=>n.visible=false);
+      for (let i=0;i<pts.length-1&&i<segs.length;i++) setSeg(segs[i],pts[i],pts[i+1]);
+      glowM.opacity=Math.min(0.85,0.08+0.9*Math.sqrt(s.lost||0));
+      if (k>=0) for (let i=0;i<helix.length-1&&i<gsegs.length;i++) setSeg(gsegs[i],helix[i],helix[i+1]);
+      segLabel.pos=[30,0.6,4];
+      /* 输出端：功率计或白屏 */
+      const far=s.view==='far', rel=Math.min(1,s.core/s.max);
+      det.visible=!far; screen.visible=far; outCone.visible=far&&rel>0.02;
+      if (far){ const d=(s.L+s.dl)/10; screen.pos=[56.2+d,0,0];
+        const rv=Math.max(0.12,s.th*(s.L+s.dl)/10); spot.pos=[-0.14,Y,0]; spot.scl=[rv,1,rv]; spot.mat.opacity=0.2+0.75*rel;
+        outCone.pos=[56.15+d/2,Y,0]; outCone.rot=[0,0,-PI/2]; outCone.scl=[rv,d,rv]; }
+      const g=lcd.c.getContext('2d'); g.fillStyle='#0f1a14'; g.fillRect(0,0,512,128); g.fillStyle='#9fe7b0'; g.font='300 76px ui-monospace,Consolas,monospace'; g.textAlign='right';
+      g.fillText(far?'——':s.reading.split(' ')[0],420,96); g.font='36px '+FONT; g.textAlign='left'; g.fillText(far?'':s.reading.split(' ')[1],430,96);
+    };
+  }
+  
+
+  fiber.camera={target:[4,6,-4], dist:155, theta:1.32, phi:0.98, minDist:20, maxDist:280};
+
+  return {michelson, newton, spectrometer, fiber};
 })();

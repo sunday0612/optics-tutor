@@ -18,7 +18,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
  vm.runInContext(`SP.s.rows=[{n:1,k:1,L:180,R:0},{n:1,k:-1,L:180,R:0}]`,labs);
  assert.equal(vm.runInContext('SP.calc().ok.length',labs),0);
  vm.runInContext(`MI.s.rows=[{N:0,R:32},{N:0,R:32},{N:0,R:32},{N:50,R:32.016}]`,labs);
@@ -101,5 +101,26 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert(Math.abs(sp.unknown.u-Math.hypot(sp.unknown.fromD,sp.unknown.fromPhi))<1e-12);
  vm.runInContext(`SP.s.rows=SP.s.rows.slice(0,3)`,labs);
  assert.equal(vm.runInContext('SP.calc().unknown.lam',labs),undefined);
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line).');
+ // ---------- v1.2.0：光纤耦合与弯曲损耗 ----------
+ const ref=vm.runInContext('FB.calc().ref',labs);
+ assert(Math.abs(ref.c-1.584)<0.005, 'Marcuse c '+ref.c);          // c = 2γ³/(3β²)
+ assert(Math.abs(ref.mfd-4.28)<0.02, 'MFD '+ref.mfd);              // 2w，Marcuse 模场近似
+ labs.fbC=ref.c;
+ vm.runInContext(`{const L=R=>3e3*Math.sqrt(R)*Math.exp(-fbC*R), P0=700, rows=[{t:'base',P:P0}];
+   for(const [R,N] of [[4,1],[5,2],[6,5],[7,10]]){ rows.push({t:'bend',R,N,P:P0*10**(-L(R)*N/10)},{t:'base',P:P0}); }
+   rows.push({t:'bend',R:3.5,N:1,P:P0*10**(-L(3.5)/10)},{t:'base',P:P0*0.95});          // 取下后基准降了 5%：耦合变了
+   rows.push({t:'bend',R:6.5,N:1,P:P0*10**(-L(6.5)/10)});                                // 没有复测基准
+   FB.s.rows=rows;}`,labs);
+ const fb=vm.runInContext('FB.calc()',labs);
+ assert.deepStrictEqual(Array.from(fb.items,x=>x.flag),['','','','','drift','small']);
+ assert.equal(fb.pts.length,4);
+ assert(Math.abs(fb.fit.c-ref.c)<1e-9);
+ assert(fb.fit.uc<1e-9);
+ vm.runInContext(`FB.s.rows=[{t:'bend',R:5,N:1,P:100},{t:'base',P:700}]`,labs);
+ assert.equal(vm.runInContext('FB.calc().items[0].flag',labs),'nobase');
+ vm.runInContext(`FB.s.rows=[20,30,40,50].map(L=>({t:'far',L,r:FB.calc().ref.th*(L+1.5)}))`,labs);
+ const far=vm.runInContext('FB.calc().far',labs);
+ assert(Math.abs(far.mfd-ref.mfd)<1e-9 && Math.abs(far.delta-1.5)<1e-9);
+ assert(Math.abs(far.umfd/far.mfd-far.u/far.th)<1e-12);
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss).');
 })().catch(e=>{console.error(e);process.exitCode=1});

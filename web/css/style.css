@@ -219,6 +219,10 @@ table.data tr.warn td{color:var(--bad)}
 .segcheck th:last-child{text-align:left}
 .askcount{margin-top:12px;padding:10px 12px;border:1px solid var(--coat);border-radius:6px;background:var(--coat-soft);font-size:13.5px}
 .askcount input{width:96px;margin-left:8px;font:inherit;font-size:14px;border:1px solid var(--hair);border-radius:5px;padding:4px 8px;background:#fff}
+table.data tr.bad td{color:var(--bad)}
+.fbtable th{white-space:nowrap}
+.fbtable td:last-child{font-size:12.5px;text-align:left}
+.result canvas.chart{display:block;width:100%;margin-top:10px}
 .ctl-inline{display:flex;align-items:center;gap:8px;color:#C9C8C2;font-size:13px;flex-wrap:wrap}
 
 /* ---------------- 三维模型 ---------------- */

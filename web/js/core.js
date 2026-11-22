@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -246,7 +246,7 @@ function drawStrip(c, value, {px=8, major=10, label=k=>k}={}){
   }
   ctx.strokeStyle='#d4593f'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
 }
-/* AI 批改流程（三个实验共用） */
+/* AI 批改流程（各实验共用） */
 async function runReview(p, {check, prompt, offline}){
   const box=$('#'+p+'-review'), btn=$('#'+p+'-check');
   if(btn.disabled) return false;

@@ -31,6 +31,10 @@ class API(unittest.TestCase):
   self.assertEqual(self.req('/api/labs')[1]['mi'],state)
   self.assertEqual(server.load_labs()['mi'],state)
   self.assertEqual(json.loads(Path(server.LAB_FILE).read_text(encoding='utf-8'))['mi'],state)
+ def test_fiber_lab(self):
+  state={'rows':[{'t':'base','P':700.1}],'x':0.1,'review':''}
+  self.assertEqual(self.req('/api/labs',{'lab':'fb','state':state})[0],200)
+  self.assertEqual(self.req('/api/labs')[1]['fb'],state)
  def test_stats_corrupt_line(self):
   Path(server.LOG_FILE).write_text('bad json\n{"type":"quiz","data":[],"time":"today"}\n',encoding='utf-8')
   self.assertEqual(self.req('/api/stats')[0],200)
