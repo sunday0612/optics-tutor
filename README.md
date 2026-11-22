@@ -1,6 +1,6 @@
 # 光影助教 · 波动光学可视化与虚拟实验
 
-当前版本：**v1.4.1**（2026-11-22），更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：**v1.4.2**（2026-11-22），更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 面向大一学生的大学物理（波动光学）学习软件：
 
@@ -24,10 +24,10 @@ AI 使用 **DeepSeek**，API Key 只保存在你自己的电脑上。
 
 | 系统 | 操作 | 生成的软件 |
 |---|---|---|
-| Windows | 双击 `一键打包（Windows）.bat` | `dist\光影助教.exe` |
+| Windows | 双击 `一键打包（Windows）.bat` | `dist\光影助教-v1.4.2.exe` |
 | macOS | 双击 `一键打包（macOS）.command` | `dist/光影助教.app` |
 
-打包大约需要 3～5 分钟，完成后会自动打开 `dist` 文件夹。之后**双击软件即可使用，不再需要 Python**。生成的 exe 也可以直接发给同学。
+打包大约需要 3～5 分钟，完成后会自动打开 `dist` 文件夹。版本号自动取自 `server.py` 的 `APP_VERSION`：Windows 的文件名带版本号，右键 → 属性 → 详细信息也能看到；macOS 在“显示简介”里能看到。不想自己打包，也可以直接在 GitHub 的 Releases 页面下载 Windows 版。之后**双击软件即可使用，不再需要 Python**。生成的 exe 也可以直接发给同学。
 
 ## 二、第一次打开
 

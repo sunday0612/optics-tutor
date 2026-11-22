@@ -35,6 +35,18 @@ class API(unittest.TestCase):
   state={'rows':[{'t':'base','P':700.1}],'x':0.1,'review':''}
   self.assertEqual(self.req('/api/labs',{'lab':'fb','state':state})[0],200)
   self.assertEqual(self.req('/api/labs')[1]['fb'],state)
+ def test_build_version(self):
+  import build
+  self.assertEqual(build.read_version(),server.APP_VERSION)
+  text=build.version_info(server.APP_VERSION,'光影助教-v'+server.APP_VERSION+'.exe')
+  got={}
+  rec=lambda name:(lambda *a,**k:(name,a,k))
+  env={n:rec(n) for n in ['VSVersionInfo','FixedFileInfo','StringFileInfo','StringTable','VarFileInfo','VarStruct']}
+  env['StringStruct']=lambda k,v:got.__setitem__(k,v)
+  eval(text.split('\n',1)[1],env)                                    # PyInstaller 用 eval 读取这个文件
+  self.assertEqual(got['FileVersion'],server.APP_VERSION); self.assertEqual(got['ProductVersion'],server.APP_VERSION)
+  filevers=eval(text.split('\n',1)[1],{**env,'VSVersionInfo':lambda ffi,kids:ffi,'FixedFileInfo':lambda **k:k['filevers']})
+  self.assertEqual(filevers,tuple(int(x) for x in server.APP_VERSION.split('.'))+(0,))
  def test_stats_corrupt_line(self):
   Path(server.LOG_FILE).write_text('bad json\n{"type":"quiz","data":[],"time":"today"}\n',encoding='utf-8')
   self.assertEqual(self.req('/api/stats')[0],200)
