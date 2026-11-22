@@ -23,7 +23,7 @@ from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 
 
 # ---------------- 路径 ----------------

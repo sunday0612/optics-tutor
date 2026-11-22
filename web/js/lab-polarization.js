@@ -387,11 +387,11 @@ const PL = (() => {
 有效测量：${good.map(x=>`α=${x.alpha}°：I_max=${x.Imax} µW，I_min=${x.Imin} µW，比值 ${x.ratio.toFixed(3)}（理论 ${x.th.ratio.toFixed(3)}），长轴 ${x.major==null?'在近圆偏振时不确定':x.major+'°'}`).join('；')}。
 未通过极值检查的角度：${c.g.filter(x=>!x.valid).map(x=>x.alpha+'°').join('、')||'无'}。
 实际是${TYPE[s.type]}（相位延迟 ${s.delta.toFixed(1)}°），学生判断为${TYPE[s.guess]}。说明 45° 附近的判断依据，并提醒只测光强分不出快轴和慢轴。${QUARTER_RATIO}
-用中文分四段，段首依次为【总评】【数据问题】【误差来源】【改进建议】，只根据给出的数据批改。`
+请给出批改意见：中文，250~350 字，分四段，段首依次为【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。只根据给出的数据批改，语气像耐心的助教，不要使用 Markdown。`
           :`你是物理光学实验课的助教。只批改马吕斯定律。
 检偏器读数 θ/° 与光强 I/µW：${s.rows.filter(r=>r.t==='m').map(r=>`(${r.th}, ${r.I})`).join(' ')}。
 拟合结果：I_max = ${c.m.Imax.toFixed(1)} µW，I_min = ${c.m.Imin.toFixed(2)} µW，消光比 ${(c.m.ratio*100).toFixed(2)}%，R² = ${c.m.r2.toFixed(5)}，θ∥ = ${c.m.par.toFixed(2)}°，不确定度 ${c.m.u.toFixed(2)}°。真实 θ∥ = ${s.t0.toFixed(2)}°（模 180°）。
-用中文分四段，段首依次为【总评】【数据问题】【误差来源】【改进建议】，只根据给出的数据批改。`,
+请给出批改意见：中文，250~350 字，分四段，段首依次为【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。只根据给出的数据批改，语气像耐心的助教，不要使用 Markdown。`,
         offline:()=>plateMode?plateFeedback(c,good):malusFeedback(c.m)
       });
       if (text){
