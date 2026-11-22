@@ -2,7 +2,7 @@ name: Publish Windows download
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'codex/v1.0.2-newton-rings']
+    branches: [main]
     paths: ['.github/workflows/windows-release.yml']
 permissions:
   contents: read
