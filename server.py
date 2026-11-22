@@ -23,7 +23,7 @@ from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 
 # ---------------- 路径 ----------------
@@ -107,7 +107,7 @@ def write_log(record):
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-LAB_NAMES = {"mi": "迈克尔逊干涉仪", "nr": "牛顿环", "sp": "分光计", "fb": "光纤弯曲损耗"}
+LAB_NAMES = {"mi": "迈克尔逊干涉仪", "nr": "牛顿环", "sp": "分光计", "fb": "光纤弯曲损耗", "pl": "马吕斯定律与波片"}
 
 
 def summary():

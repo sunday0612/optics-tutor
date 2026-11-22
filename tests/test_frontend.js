@@ -18,7 +18,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
  vm.runInContext(`SP.s.rows=[{n:1,k:1,L:180,R:0},{n:1,k:-1,L:180,R:0}]`,labs);
  assert.equal(vm.runInContext('SP.calc().ok.length',labs),0);
  vm.runInContext(`MI.s.rows=[{N:0,R:32},{N:0,R:32},{N:0,R:32},{N:50,R:32.016}]`,labs);
@@ -122,5 +122,21 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  const far=vm.runInContext('FB.calc().far',labs);
  assert(Math.abs(far.mfd-ref.mfd)<1e-9 && Math.abs(far.delta-1.5)<1e-9);
  assert(Math.abs(far.umfd/far.mfd-far.u/far.th)<1e-12);
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss).');
+ // ---------- v1.3.0：马吕斯定律与波片 ----------
+ vm.runInContext(`Object.assign(PL.s,{t0:27.3,f0:40,type:'q',delta:90,plate:false});
+   PL.s.rows=Array.from({length:13},(_,k)=>{const th=5+k*15; return {t:'m',th,I:2+470*Math.cos((th-27.3)*Math.PI/180)**2};});`,labs);
+ const pm=vm.runInContext('PL.calc().m',labs);
+ assert(Math.abs(pm.par-27.3)<1e-9 && Math.abs(pm.Imax-472)<1e-9 && Math.abs(pm.Imin-2)<1e-9 && pm.r2>0.999999);
+ assert(pm.uA<1e-6 && Math.abs(pm.u-0.1/Math.sqrt(3))<1e-6);
+ vm.runInContext(`PL.s.rows=PL.s.rows.slice(0,7)`,labs);                     // 只覆盖了 90°：不能拟合
+ assert.equal(vm.runInContext('PL.calc().m',labs),null);
+ // λ/4：从消光位置转过 α，I_min/I_max = tan²α；λ/2：始终是线偏振光，振动方向转过 2α
+ vm.runInContext(`PL.s.rows=[{t:'e',a:40,th:117.3,I:1},{t:'w',a:70,th:0,I:400},{t:'w',a:70,th:90,I:100},{t:'w',a:85,th:10,I:300}]`,labs);
+ const pg=vm.runInContext('PL.calc().g',labs);
+ assert.equal(pg[0].alpha,30); assert.equal(pg[0].n,2); assert(Math.abs(pg[0].th.ratio-1/3)<1e-3);
+ assert(Math.abs(pg[0].th.major-30)<0.11); assert.equal(pg[1].n,1);
+ vm.runInContext(`PL.s.type='h'; PL.s.delta=180`,labs);
+ const ph=vm.runInContext('PL.calc().g[0].th',labs);
+ assert(ph.ratio<1e-6 && Math.abs(ph.major-60)<0.11);
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates).');
 })().catch(e=>{console.error(e);process.exitCode=1});

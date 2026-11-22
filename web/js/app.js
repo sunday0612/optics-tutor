@@ -1,7 +1,7 @@
 /* =====================================================================
- * app.js —— 页面路由与启动：#sim 现象仿真；#lab-michelson / #lab-newton / #lab-grating / #lab-fiber 虚拟实验
+ * app.js —— 页面路由与启动：#sim 现象仿真；#lab-michelson / #lab-newton / #lab-grating / #lab-fiber / #lab-polar 虚拟实验
  * ===================================================================== */
-const LABS = {michelson:MI, newton:NR, grating:SP, fiber:FB};
+const LABS = {michelson:MI, newton:NR, grating:SP, fiber:FB, polar:PL};
 let curLab = 'michelson';
 
 function route(){
@@ -19,7 +19,7 @@ document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{ l
 document.querySelectorAll('.labtab').forEach(b=>b.addEventListener('click',()=>{ location.hash = 'lab-'+b.dataset.lab; }));
 window.addEventListener('hashchange', route);
 
-/* 键盘 ← → 微调当前实验的鼓轮 / 望远镜 / 光纤调整架 */
+/* 键盘 ← → 微调当前实验的鼓轮 / 望远镜 / 光纤调整架 / 偏振片转盘 */
 document.addEventListener('keydown', e=>{
   if ($('#view-lab').hidden || !$('#settings').hidden || /input|textarea|select/i.test(e.target.tagName)) return;
   if (e.key==='ArrowRight' || e.key==='ArrowLeft'){ e.preventDefault(); LABS[curLab].key(e.key==='ArrowRight'?1:-1, e.shiftKey); }

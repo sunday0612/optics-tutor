@@ -1,6 +1,6 @@
 /* =====================================================================
- * models3d.js —— 四个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
- *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗
+ * models3d.js —— 五个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
+ *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）
  * 每个模型返回 update()，在实验状态变化时调用：部件会跟着操作移动或转动。
  * 观察者默认站在 −z 一侧（“前方”）。
  * ===================================================================== */
@@ -420,5 +420,66 @@ const Models3D = (() => {
 
   fiber.camera={target:[4,6,-4], dist:155, theta:1.32, phi:0.98, minDist:20, maxDist:280};
 
-  return {michelson, newton, spectrometer, fiber};
+  /* =================================================================
+   * 5. 马吕斯定律与波片：起偏器、波片、检偏器都装在带刻度的旋转镜架上
+   *   光轴沿 x，观察者在 +z 一侧
+   * ================================================================= */
+  function rotMount(v, x, Y, glassColor){
+    const post=new Node();
+    post.add(cylY(0.6,Y-4.2,MAT.steel,x,(Y-4.2)/2+0.8,0), boxN(3.4,0.8,5,MAT.cast,x,0.4,0), boxN(1.8,1.6,5.6,MAT.anod,x,Y-4.6,0));
+    const house=alongX(new Node()).at(x,Y,0);
+    house.add(N(cylinder(4.1,4.1,1.4,64,false),MAT.anod), N(disc(4.1,0.7,64,true,3.3),MAT.anod), N(disc(4.1,-0.7,64,false,3.3),MAT.anod),
+      boxN(0.9,0.3,0.25,MAT.led,-3.7,0.75,0));               // 读数指标（固定，在正上方）
+    const ring=new Node();                                  // 转动部分：刻度环 + 镜片 + 透振方向刻线
+    ring.add(N(cylinder(3.3,3.3,1.0,64,false),MAT.alu), N(disc(3.3,0.52,64,true,1.6),mat({color:'#ffffff',spec:0.4,shin:40,map:dial(v)})),
+      N(disc(1.6,0,48,true),mat({color:glassColor,spec:1,shin:140,opacity:0.5})), boxN(3.1,0.06,0.12,mat({color:'#f2f2f2',unlit:true}),0,0.08,0),
+      boxN(0.5,0.5,0.6,MAT.knob,0,0,3.6));
+    house.add(ring);
+    const g=new Node(); g.add(post, house); g.ring=ring; g.house=house; return g;
+  }
+  function polarization(v, S){
+    const R=v.root, Y=9;
+    table(R, 120, 60);
+    R.add(boxN(78,1.2,5,MAT.castHi,4,0.6,0));               // 光学导轨
+    R.add(shadow(36,10,-32,0), shadow(70,10,8,0), shadow(18,10,20,-14));
+    const laser=new Node();
+    laser.add(cylX(2.3,30,mat({color:'#2c3440',spec:0.45,shin:40}),-32,Y,0), cylX(2.45,1.2,MAT.chrome,-16.6,Y,0), cylX(2.45,1.2,MAT.chrome,-47.4,Y,0),
+      cylX(0.7,1,MAT.anod,-15.6,Y,0), N(disc(0.22,0,20),MAT.led).at(-15.05,Y,0).rotate(0,0,-PI/2));
+    for (const x of [-42,-22]) laser.add(boxN(3,Y-2.6,4,MAT.cast,x,(Y-2.6)/2+1.2,0), boxN(4.4,1.4,5,MAT.castHi,x,Y-2.4,0));
+    R.add(laser);
+    const P1=rotMount(v,-6,Y,'#5a5f66'), WP=rotMount(v,6,Y,'#9fc6ef'), AN=rotMount(v,18,Y,'#5a5f66');
+    R.add(P1, WP, AN);
+    /* 探头与功率计 */
+    const det=new Node();
+    det.add(cylX(1.8,2.6,MAT.anod,29,Y,0), N(disc(1.3,0,32),mat({color:'#1a1a1f',spec:0.9,shin:90})).at(27.68,Y,0).rotate(0,0,PI/2), cylY(0.6,Y-1.8,MAT.steel,29.4,(Y-1.8)/2+0.9,0), boxN(3.4,0.8,5,MAT.cast,29.4,0.4,0));
+    R.add(det);
+    const meterBox=new Node().at(20,0,-15), lcd=lcdTex(v);
+    meterBox.add(boxN(17,8,7,mat({color:'#3a3f46',spec:0.3}),0,4,0), boxN(17.4,0.6,7.4,MAT.anod,0,0.3,0),
+      N(plane(11,2.75),mat({color:'#ffffff',unlit:true,map:lcd.t})).at(-1.5,5.2,3.52).rotate(PI/2,0,0), knob(v,0.8,0.6).at(6,5.2,3.7).rotate(PI/2,0,0));
+    R.add(meterBox);
+    const cable=[]; const cpts=smooth([[30.4,Y,0],[32,Y-2,-2],[31,1,-8],[26,0.6,-12],[22,2,-11.5]],2);
+    for (let i=0;i<cpts.length-1;i++){ const n=beam(mat({color:'#111214',spec:0.3}),0.18); cable.push(n); R.add(n); n.r=0.18; setSeg(n,cpts[i],cpts[i+1]); }
+    /* 光束：亮度随光强变化 */
+    const bm=a=>mat({color:'#ff2a1a',unlit:true,opacity:a,additive:true});
+    const b0=beam(bm(0.75),0.12), b1=beam(bm(0.6),0.12), b2=beam(bm(0.6),0.12), b3=beam(bm(0.6),0.12);
+    R.add(b0,b1,b2,b3); setBeam(b0,[-15,Y,0],[-6.7,Y,0]);
+    const L=(t,n,o)=>v.label(t,n,o);
+    L('He-Ne 激光器',laser.children[0],[0,3,0]); L('起偏器 P₁',P1.house,[0,4.8,0]); L('波片',WP.house,[0,4.8,0]); L('检偏器',AN.house,[0,4.8,0]);
+    L('探头',det.children[0],[0,2.6,0]); L('光功率计',meterBox.children[0],[0,4.8,0]);
+    return function update(){
+      const s=S(), k=Math.min(1,s.I/s.I0);
+      P1.ring.rot=[0,0,0];
+      AN.ring.rot=[0,-rad(s.th),0];
+      WP.ring.rot=[0,-rad(s.a),0];
+      WP.pos=s.plate?[0,0,0]:[0,0,-12];
+      setBeam(b1,[-5.3,Y,0],[s.plate?5.3:17.3,Y,0]);
+      b2.visible=s.plate; if (s.plate) setBeam(b2,[6.7,Y,0],[17.3,Y,0]);
+      setBeam(b3,[18.7,Y,0],[27.6,Y,0]); b3.mat.opacity=0.04+0.7*k; b3.r=0.12;
+      const g=lcd.c.getContext('2d'); g.fillStyle='#0f1a14'; g.fillRect(0,0,512,128); g.fillStyle='#9fe7b0'; g.font='300 76px ui-monospace,Consolas,monospace'; g.textAlign='right';
+      g.fillText(s.reading,420,96); g.font='36px '+FONT; g.textAlign='left'; g.fillText('µW',430,96);
+    };
+  }
+  polarization.camera={target:[0,7,-2], dist:120, theta:1.3, phi:1.0, minDist:20, maxDist:260};
+
+  return {michelson, newton, spectrometer, fiber, polarization};
 })();
