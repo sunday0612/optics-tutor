@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -108,7 +108,10 @@ const LabStore = {
     if(!AI.backend || this.failed) return;
     const state=JSON.parse(JSON.stringify(s)); this.data[p]=state;
     this.queue=this.queue.then(async()=>{
-      const r=await fetch('api/labs',{method:'POST',headers:apiHeaders(),body:JSON.stringify({lab:p,state}),keepalive:true});
+      // keepalive 让关窗时的最后一次保存也能发出；Chrome 限制未读完的 keepalive 响应共 64 KB，所以每次都要读完响应
+      const body=JSON.stringify({lab:p,state});
+      const r=await fetch('api/labs',{method:'POST',headers:apiHeaders(),body,keepalive:body.length<60000});
+      await r.text();
       if(!r.ok) throw Error('保存失败');
       $('#'+p+'-save-status').textContent='实验已保存到本机';
     }).catch(()=>{ $('#'+p+'-save-status').textContent='保存失败，请保持软件打开并再次记录或批改以重试'; });

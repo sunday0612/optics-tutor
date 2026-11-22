@@ -1,6 +1,6 @@
 /* =====================================================================
- * models3d.js —— 五个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
- *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）
+ * models3d.js —— 六个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
+ *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）、半导体激光器与光电二极管
  * 每个模型返回 update()，在实验状态变化时调用：部件会跟着操作移动或转动。
  * 观察者默认站在 −z 一侧（“前方”）。
  * ===================================================================== */
@@ -481,5 +481,60 @@ const Models3D = (() => {
   }
   polarization.camera={target:[0,7,-2], dist:120, theta:1.3, phi:1.0, minDist:20, maxDist:260};
 
-  return {michelson, newton, spectrometer, fiber, polarization};
+  /* =================================================================
+   * 6. 半导体激光器与光电二极管：TEC 激光二极管座、挡光板、功率计探头 / 光电二极管
+   *   光轴沿 x，观察者在 +z 一侧
+   * ================================================================= */
+  function lcdBox(v, w, lines){ const g=new Node(), l=[];
+    g.add(boxN(w,8,7,mat({color:'#3a3f46',spec:0.3}),0,4,0), boxN(w+0.4,0.6,7.4,MAT.anod,0,0.3,0));
+    for (let i=0;i<lines;i++){ const d=lcdTex(v); g.add(N(plane(w*0.58,w*0.145),mat({color:'#ffffff',unlit:true,map:d.t})).at(-w*0.12,6-i*2.6,3.52).rotate(PI/2,0,0)); l.push(d); }
+    g.add(knob(v,0.8,0.6).at(w*0.36,5.2,3.7).rotate(PI/2,0,0), knob(v,0.5,0.6).at(w*0.36,2.6,3.7).rotate(PI/2,0,0));
+    g.lcd=l; return g; }
+  function lcdText(d, text, unit){ const g=d.c.getContext('2d'); g.fillStyle='#0f1a14'; g.fillRect(0,0,512,128); g.fillStyle='#9fe7b0';
+    g.font='300 76px ui-monospace,Consolas,monospace'; g.textAlign='right'; g.fillText(text,400,96); g.font='34px '+FONT; g.textAlign='left'; g.fillText(unit,412,96); }
+  function laser(v, S){
+    const R=v.root, Y=7;
+    table(R, 110, 60);
+    R.add(shadow(14,12,-17,0), shadow(26,10,4,0), shadow(40,10,-2,-16));
+    /* 激光二极管座：TEC 致冷片 + 散热片 + TO 管壳 + 准直透镜筒 */
+    const mount=new Node();
+    mount.add(boxN(10,1,9,MAT.anod,-17,0.5,0));
+    for (let k=0;k<7;k++) mount.add(boxN(0.5,3.4,8,MAT.alu,-21.4+k*1.2,2.7,0));
+    mount.add(boxN(8.6,0.5,8,mat({color:'#e7e3d8',spec:0.2}),-17.5,4.65,0), boxN(7,5,7,MAT.anod,-17.5,7.4,0));
+    mount.add(cylX(0.55,0.6,MAT.chrome,-13.7,Y,0), cylX(0.95,3.4,MAT.anod,-12,Y,0), cylX(1.05,0.6,MAT.knob,-10.7,Y,0), N(disc(0.6,0,24),mat({color:'#cfe2fa',spec:1,shin:140,opacity:0.6})).at(-10.28,Y,0).rotate(0,0,-PI/2));
+    R.add(mount);
+    const emit=N(disc(0.35,0,20),glow('#ff3a20',0.9)).at(-10.25,Y,0).rotate(0,0,-PI/2); R.add(emit);
+    /* 挡光板 */
+    const shutter=new Node();
+    shutter.add(cylY(0.5,Y-3,MAT.steel,0,(Y-3)/2+0.8,-1.8), boxN(3,0.8,4,MAT.cast,0,0.4,-1.8));
+    const flag=new Node(); flag.add(boxN(0.25,3.6,3,MAT.anod,0,0,0)); shutter.add(flag); R.add(shutter);
+    /* 探测器：功率计探头 / 光电二极管（不用的放在后面） */
+    const head=new Node();
+    head.add(cylX(2,2.6,MAT.anod,0,Y,0), N(disc(1.5,0,32),mat({color:'#1a1a1f',spec:0.9,shin:90})).at(-1.32,Y,0).rotate(0,0,PI/2), cylY(0.6,Y-2,MAT.steel,0.4,(Y-2)/2+0.8,0), boxN(3.4,0.8,5,MAT.cast,0.4,0.4,0));
+    const pd=new Node();
+    pd.add(boxN(1.8,2.6,2.6,MAT.anod,0,Y,0), N(disc(0.45,0,24),mat({color:'#2a2440',spec:1,shin:120})).at(-0.92,Y,0).rotate(0,0,PI/2), cylX(0.45,1.6,MAT.chrome,1.6,Y,0),
+      cylY(0.6,Y-2,MAT.steel,0,(Y-2)/2+0.8,0), boxN(3.4,0.8,5,MAT.cast,0,0.4,0));
+    R.add(head, pd);
+    const ctrl=lcdBox(v,18,2).at(-16,0,-16), meter=lcdBox(v,16,1).at(12,0,-16);
+    R.add(ctrl, meter);
+    const b=beam(mat({color:'#ff2a1a',unlit:true,opacity:0.6,additive:true}),0.18); R.add(b);
+    const L=(t,n,o)=>v.label(t,n,o);
+    L('激光二极管（TEC 控温）',mount.children[mount.children.length-5],[0,3.4,0]); L('准直透镜',mount.children[mount.children.length-3],[0,-2.6,0]);
+    L('挡光板',shutter.children[0],[0,4.6,0]); L('驱动器与 TEC 控制器',ctrl.children[0],[0,4.8,0]); L('读数表',meter.children[0],[0,4.8,0]);
+    const detLabel=new Node(); R.add(detLabel); L('探测器',detLabel,[0,0,0]);
+    return function update(){
+      const s=S(), k=Math.min(1,s.P/s.PMAX);
+      flag.pos=s.shut?[0,Y,0]:[0,Y+5,0];
+      const end=s.shut?-0.2:12.6;
+      setBeam(b,[-10.3,Y,0],[end,Y,0]); b.mat.opacity=0.02+0.75*Math.sqrt(k); b.visible=s.P>0.002;
+      emit.mat.opacity=0.15+0.8*Math.sqrt(k);
+      head.pos=s.det==='pm'?[14,0,0]:[22,0,-8]; pd.pos=s.det==='pd'?[14,0,0]:[22,0,-8];
+      detLabel.pos=[14,Y+3.2,0];
+      lcdText(ctrl.lcd[0], s.I.toFixed(1), 'mA'); lcdText(ctrl.lcd[1], s.T.toFixed(2), '°C');
+      lcdText(meter.lcd[0], s.read>=10?s.read.toFixed(2):s.read>=1?s.read.toFixed(3):s.read.toFixed(4), s.det==='pm'?'mW':'µA');
+    };
+  }
+  laser.camera={target:[-2,6,-4], dist:110, theta:1.25, phi:1.02, minDist:20, maxDist:240};
+
+  return {michelson, newton, spectrometer, fiber, polarization, laser};
 })();

@@ -18,7 +18,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD']]){vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};','return {s,init,calc};'),labs);vm.runInContext(n+'.init()',labs)}
  vm.runInContext(`SP.s.rows=[{n:1,k:1,L:180,R:0},{n:1,k:-1,L:180,R:0}]`,labs);
  assert.equal(vm.runInContext('SP.calc().ok.length',labs),0);
  vm.runInContext(`MI.s.rows=[{N:0,R:32},{N:0,R:32},{N:0,R:32},{N:50,R:32.016}]`,labs);
@@ -138,5 +138,21 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  vm.runInContext(`PL.s.type='h'; PL.s.delta=180`,labs);
  const ph=vm.runInContext('PL.calc().g[0].th',labs);
  assert(ph.ratio<1e-6 && Math.abs(ph.major-60)<0.11);
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates).');
+ // ---------- v1.4.0：半导体激光器与光电二极管 ----------
+ vm.runInContext(`{const T0=75, rows=[];
+   for(const Ts of [20,25,30,35]){ const ith=30*Math.exp((Ts-25)/T0), eta=0.5;
+     for(const I of [0,10,20]) rows.push({t:'pi',Ts,T:Ts,I,P:0.0008*I});
+     for(let k=1;k<=6;k++){ const I=ith+k*2; rows.push({t:'pi',Ts,T:Ts,I,P:eta*(I-ith)}); } }
+   rows.push({t:'pd',Ts:25,T:25,I:40,det:'pd',shut:true,v:0.2},{t:'pd',Ts:25,T:25,I:40,det:'pd',shut:true,v:0.1});
+   for(const [I,P] of [[32,1],[34,2],[36,3],[40,5]]) rows.push({t:'pd',Ts:25,T:25,I,det:'pm',shut:false,v:P},{t:'pd',Ts:25,T:25,I,det:'pd',shut:false,v:0.42*P*1000+0.15});
+   LD.s.rows=rows;}`,labs);
+ const ld=vm.runInContext('LD.calc()',labs);
+ assert.equal(ld.groups.length,4);
+ const g25=ld.groups.find(g=>g.Ts===25);
+ assert(Math.abs(g25.fit.ith-30)<1e-9 && Math.abs(g25.fit.eta-0.5)<1e-12 && g25.below===3 && g25.fit.uith<1e-9);
+ assert(Math.abs(ld.T0.T0-75)<1e-6 && ld.T0.n===4);
+ assert(Math.abs(ld.pd.dark-0.15)<1e-12 && ld.pd.n===4);
+ assert(Math.abs(ld.pd.R-0.42)<1e-12 && Math.abs(ld.pd.pairs[0].R-0.42)<1e-12 && ld.pd.pairs[0].raw>0.42);
+ assert(Math.abs(ld.pd.u-0.42*0.03/Math.sqrt(3))<1e-9);
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode).');
 })().catch(e=>{console.error(e);process.exitCode=1});

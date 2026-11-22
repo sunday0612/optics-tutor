@@ -79,12 +79,14 @@
     <button class="labtab" data-lab="grating">分光计测光栅常数</button>
     <button class="labtab" data-lab="fiber">光纤耦合与弯曲损耗</button>
     <button class="labtab" data-lab="polar">马吕斯定律与波片</button>
+    <button class="labtab" data-lab="laser">半导体激光器特性</button>
   </div>
   <div class="labwrap" id="labbox-michelson"></div>
   <div class="labwrap" id="labbox-newton" hidden></div>
   <div class="labwrap" id="labbox-grating" hidden></div>
   <div class="labwrap" id="labbox-fiber" hidden></div>
   <div class="labwrap" id="labbox-polar" hidden></div>
+  <div class="labwrap" id="labbox-laser" hidden></div>
 </main>
 
 <footer>
@@ -114,12 +116,12 @@
     </section>
     <section class="sheet-sec">
       <h3>关于</h3>
-      <p>光影助教 <span id="appVersion"></span>。现象仿真覆盖杨氏双缝、单缝衍射、光栅衍射、牛顿环和马吕斯定律；虚拟实验包括迈克尔逊干涉仪、牛顿环、分光计、光纤耦合与弯曲损耗，以及马吕斯定律与波片。</p>
+      <p>光影助教 <span id="appVersion"></span>。现象仿真覆盖杨氏双缝、单缝衍射、光栅衍射、牛顿环和马吕斯定律；虚拟实验包括迈克尔逊干涉仪、牛顿环、分光计、光纤耦合与弯曲损耗、马吕斯定律与波片，以及半导体激光器与光电二极管特性。</p>
     </section>
   </div>
 </div>
 
-<!-- 按顺序加载：公共工具 → 现象仿真 → 五个虚拟实验 → 设置 → 页面路由 -->
+<!-- 按顺序加载：公共工具 → 现象仿真 → 六个虚拟实验 → 设置 → 页面路由 -->
 <script src="js/core.js"></script>
 <script src="js/uncertainty.js"></script>
 <script src="js/mini3d.js"></script>
@@ -130,6 +132,7 @@
 <script src="js/lab-spectrometer.js"></script>
 <script src="js/lab-fiber.js"></script>
 <script src="js/lab-polarization.js"></script>
+<script src="js/lab-laser.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/app.js"></script>
 </body>
