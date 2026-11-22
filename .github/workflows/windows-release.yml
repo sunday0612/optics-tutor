@@ -35,7 +35,8 @@ jobs:
       - name: Check version numbers
         shell: python
         run: |
-          import re, server
+          import sys; sys.path.insert(0, ".")          # shell: python 从临时文件运行，需要手动加入仓库目录
+          import server
           wf = open(".github/workflows/windows-release.yml", encoding="utf-8").read()
           assert "GuangyingTutor-v" + server.APP_VERSION + "-Windows-x64" in wf, "workflow 与 server.py 的版本号不一致"
           js = open("web/js/core.js", encoding="utf-8").read()
@@ -56,6 +57,7 @@ jobs:
           from PyInstaller.archive.readers import CArchiveReader
           exe = Path("dist/GuangyingTutor-v1.4.2-Windows-x64.exe")
           archive = CArchiveReader(str(exe))
+          import sys; sys.path.insert(0, ".")
           import pefile, server
           pe = pefile.PE(str(exe))
           strings = {k.decode(): v.decode() for fi in pe.FileInfo[0] if fi.Key == b"StringFileInfo" for st in fi.StringTable for k, v in st.entries.items()}
