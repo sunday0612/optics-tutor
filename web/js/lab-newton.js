@@ -5,6 +5,7 @@
 const NR = (() => {
   const P='nr', LAM=589.3e-6;          // 钠光波长 (mm)
   const FOV=2.4, DIV=0.01, BACKLASH=0.03;
+  const INST=0.005;                    // 读数显微镜的仪器误差限 (mm)
   const SEQ=[...Array(10)].map((_,i)=>({side:'L',k:30-i})).concat([...Array(10)].map((_,i)=>({side:'R',k:21+i})));
   const s={}; let B=null, retake=[];
 
@@ -34,7 +35,9 @@ const NR = (() => {
     el.innerHTML=labShell(P,{
       title:'牛顿环测平凸透镜的曲率半径',
       principle:`<p>平凸透镜放在平板玻璃上，两者之间形成中心薄、边缘厚的空气层。钠光垂直照射时，空气层上下表面的反射光干涉，形成以接触点为中心的明暗相间圆环，中心是暗斑。</p>
-        <p>第 k 级暗环直径 D<sub>k</sub> 满足 D<sub>k</sub>² = 4kRλ。接触点可能有灰尘或形变，所以不直接用一个环，而是用两个环直径平方之差：<b>R = (D<sub>m</sub>² − D<sub>n</sub>²) / [4(m − n)λ]</b>，这样级次的绝对值数不准也没关系。</p>`,
+        <p>第 k 级暗环直径 D<sub>k</sub> 满足 D<sub>k</sub>² = 4kRλ。接触点可能有灰尘或形变，所以不直接用一个环，而是用两个环直径平方之差：<b>R = (D<sub>m</sub>² − D<sub>n</sub>²) / [4(m − n)λ]</b>，这样级次的绝对值数不准也没关系。</p>
+        <p>不确定度：A 类取各组 R 的平均值标准偏差；B 类由读数显微镜的仪器误差限 Δ<sub>仪</sub> = 0.005 mm 估算，D = x<sub>右</sub> − x<sub>左</sub> 得 u(D) = √2·Δ<sub>仪</sub>/√3，再按 R 对 D<sub>m</sub>、D<sub>n</sub> 的偏导传递。</p>
+        <p>本台装置的参考值和相对误差在 AI 批改之后才显示，先凭自己的数据判断结果是否可信。</p>`,
       right:`<div class="canvas-wrap fill"><canvas id="${P}-bench"></canvas><div class="caption">装置示意（侧视）</div></div>
       <div class="lab-grid">
         <div class="canvas-wrap"><canvas id="${P}-view" class="eye"></canvas><div class="caption">读数显微镜视场</div><div class="msg" id="${P}-msg"></div><div class="counter" id="${P}-counter"></div></div>
@@ -154,6 +157,7 @@ const NR = (() => {
     const id=ideal(next.side,next.k), est=Math.round(rnd(-1.4,1.4))*1e-3;
     s.rows.push({...next, x:+(s.X+est).toFixed(3), off:id==null?null:+(s.A-id).toFixed(4)});
     clearReview();
+    const done=byK(); retake=retake.filter(k=>!(done[k]&&done[k].L!=null&&done[k].R!=null));
     stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row:s.rows[s.rows.length-1]}); table(); render();
   }
   function byK(){
@@ -178,12 +182,16 @@ const NR = (() => {
         invalid.push({m,n,Dm:D[m],Dn:D[n],squaredDifference});
         continue;
       }
-      items.push({m,n,R:squaredDifference/(4*(m-n)*LAM)/1000});
+      items.push({m,n,Dm:D[m],Dn:D[n],R:squaredDifference/(4*(m-n)*LAM)/1000});
     }
     const validCount=items.length;
     if (!validCount) return {D,items,invalid,validCount};
     const mean=items.reduce((a,b)=>a+b.R,0)/validCount;
-    return {D,items,invalid,validCount,mean,err:(mean-s.Rtrue/1000)/(s.Rtrue/1000)*100};
+    // B 类：u(D) = √2·Δ仪/√3；∂R/∂D = 2D/[4(m−n)λ]，各组取平均（单位换成 m）
+    const uD=Math.SQRT2*INST/Unc.SQRT3;
+    const uB=Unc.mean(items.map(x=>Math.hypot(2*x.Dm*uD,2*x.Dn*uD)/(4*(x.m-x.n)*LAM)/1000));
+    const sum=Unc.summarize(items.map(x=>x.R), uB);
+    return {D,items,invalid,validCount,mean,sum,err:(mean-s.Rtrue/1000)/(s.Rtrue/1000)*100};
   }
   function table(){
     save();
@@ -205,7 +213,8 @@ const NR = (() => {
     if (c.validCount){
       const countNote=c.invalid.length?`<div class="hint">已剔除 ${c.invalid.length} 组无效数据，平均值基于 ${c.validCount} 组。</div>`:'';
       result=`<div class="result">逐差法（m − n = 5）：${c.items.map(x=>`R(${x.m},${x.n}) = ${x.R.toFixed(3)}`).join('，')} m
-        <div>平均曲率半径 <span class="big">${c.mean.toFixed(3)} m</span>　本台装置参考值 ${(s.Rtrue/1000).toFixed(3)} m　相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(2)}%</b></div>
+        <div>平均曲率半径 <span class="big">${c.mean.toFixed(3)} m</span>　${s.checked?`本台装置参考值 ${(s.Rtrue/1000).toFixed(3)} m　相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(2)}%</b>`:'<span class="hint">参考值和相对误差在 AI 批改后显示</span>'}</div>
+        ${Unc.html(c.sum,'R','m')}
         ${countNote}</div>`;
     } else if (c.invalid.length) {
       result='<div class="hint">重测后给出平均值。</div>';
@@ -224,9 +233,10 @@ const NR = (() => {
     if (miss.length) p.push(`${miss.map(r=>(r.side==='L'?'左':'右')+r.k).join('、')} 的位置偏离超过半个环宽，很可能数错了环`);
     if (loose.length) p.push(`${loose.map(r=>(r.side==='L'?'左':'右')+r.k).join('、')} 叉丝没有压在暗环正中`);
     if (s.reversals) p.push(`记录过程中鼓轮反转了 ${s.reversals} 次，会引入回程差`);
-    return [`【总评】得到 R = ${c.mean.toFixed(3)} m，与本台装置参考值 ${(s.Rtrue/1000).toFixed(3)} m 的相对误差为 ${c.err.toFixed(2)}%，结果${level}。`,
+    const dom=c.sum.uA!=null && c.sum.uA>c.sum.uB ? 'A 类（各组 R 的离散）比仪器误差大，说明对准和数环带来的偶然误差是主要来源' : 'B 类（读数显微镜的仪器误差）占主导，说明各组数据比较一致';
+    return [`【总评】得到 R = ${Unc.format(c.sum.mean,c.sum.u,'m').text}，与本台装置参考值 ${(s.Rtrue/1000).toFixed(3)} m 的相对误差为 ${c.err.toFixed(2)}%，结果${level}。`,
       '【数据问题】'+(p.length?p.join('；')+'。':'没有发现明显问题，各组结果一致，操作方向正确。'),
-      '【误差来源】叉丝对准暗环中心的误差、数环时的计数错误、鼓轮的估读误差、测微螺杆的回程差，以及叉丝横线没有严格通过环心。',
+      `【误差来源】叉丝对准暗环中心的误差、数环时的计数错误、鼓轮的估读误差、测微螺杆的回程差，以及叉丝横线没有严格通过环心。从不确定度看，${dom}。`,
       '【改进建议】测量前先越过第 35 环再反向，整个记录过程只朝一个方向转鼓轮；对准时让竖直叉丝与暗环相切在环宽中央；边移动边默数环数，必要时回到中心重数。'].join('\n');
   }
   function review(){
@@ -243,10 +253,11 @@ const NR = (() => {
 学生的记录（级次 k，左侧读数，右侧读数，单位 mm）：
 ${Object.entries(byK()).sort((a,b)=>b[0]-a[0]).map(([k,v])=>`k=${k}: 左 ${v.L!=null?v.L.toFixed(3):'未记'}，右 ${v.R!=null?v.R.toFixed(3):'未记'}`).join('\n')}
 逐差法结果：${c.items.map(x=>`R(${x.m},${x.n})=${x.R.toFixed(3)} m`).join('，')}；平均 ${c.mean.toFixed(3)} m，相对误差 ${c.err.toFixed(2)}%。
+${Unc.line(c.sum,'R','m')}（B 类按读数显微镜仪器误差限 0.005 mm 估算）。
 系统记录的操作情况：记录过程中鼓轮反转 ${s.reversals} 次；每次记录时叉丝偏离对应暗环中心的距离（μm，正为偏右）：${s.rows.map(r=>`${r.side==='L'?'左':'右'}${r.k}:${r.off==null?'?':Math.round(r.off*1000)}`).join('，')}。该处相邻暗环间距约 70 μm，偏离超过 35 μm 说明很可能数错了环。
-请给出批改意见：中文，200~300 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。要点名具体是哪几个环有问题。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
+请给出批改意见：中文，200~300 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。要点名具体是哪几个环有问题；【误差来源】里结合 A、B 两类不确定度的大小说明主要误差来自哪里。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
-    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; save(); render(); } });
+    }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
   return {mount, render, key};
 })();
