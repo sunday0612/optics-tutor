@@ -12,3 +12,4 @@ usage_log.jsonl
 lab_sessions.json
 *.spec
 .DS_Store
+report_who.json

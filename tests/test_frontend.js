@@ -244,11 +244,17 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  vm.runInContext(`Object.assign(BM.s,{W0:0.36,z0:-250,M2:1.2})`,labs);
  const hb=vm.runInContext(`BM.hyper([300,500,700,1000,1400].map(z=>({lens:false,z,fit:{w:BM.wAt(z,false)}})),false)`,labs);
  assert(Math.abs(hb.W0-0.36)<1e-6 && Math.abs(hb.z0+250)<1e-3 && Math.abs(hb.M2-1.2)<1e-6);
+ assert(hb.reliable && !hb.why.length);
+ // v1.7.2：位置太集中时外推不可靠，不能当有效结果
+ const hc=vm.runInContext(`BM.hyper([115,120,125,130,135].map((z,k)=>({lens:false,z,fit:{w:BM.wAt(z,false)*(1+[0.004,-0.003,0.002,-0.004,0.003][k])}})),false)`,labs);
+ assert(hc.invalid || (!hc.reliable && hc.why.some(w=>w.includes('只跨了'))), 'clustered M2 must be flagged');
+ const h4=vm.runInContext(`BM.hyper([100,700,1300,1900].map(z=>({lens:false,z,fit:{w:BM.wAt(z,false)}})),false)`,labs);
+ assert(!h4.reliable && h4.why[0].includes('只有 4 个位置'));
  const bl=vm.runInContext('BM.beam(true)',labs);
  assert(bl.z0>300 && bl.W0<0.36);                                              // 透镜后束腰在导轨上、比原来小
  vm.runInContext(`Object.assign(LN.s,{f:180,dl:2,rev:false}); { const sp=LN.sharpPos(1100); LN.s.rows=[{t:'b',xs:1100,x:sp[0],big:true,off:0},{t:'b',xs:1100,x:sp[1],big:false,off:0},
    {t:'a',x:100+180-2,rev:false,off:0},{t:'a',x:100+180+2,rev:true,off:0}]; }`,labs);
  const lc=vm.runInContext('LN.calc()',labs);
  assert(Math.abs(lc.bessel.mean-180)<1e-9 && Math.abs(lc.auto.f1-178)<1e-9 && Math.abs(lc.auto.mean-180)<1e-9 && Math.abs(lc.auto.delta-2)<1e-9);
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M², lens focal length).');
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length).');
 })().catch(e=>{console.error(e);process.exitCode=1});

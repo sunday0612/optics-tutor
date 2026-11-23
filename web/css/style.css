@@ -236,8 +236,8 @@ table.data tr.warn td{color:var(--bad)}
 .unc{margin-top:6px;padding-top:6px;border-top:1px dashed var(--hair);font-size:13px;color:var(--muted)}
 .unc b{color:var(--ink);font-family:var(--math);font-weight:400;font-size:15px}
 /* 规范结果：每个实验最终要报告的那一行 */
-.unc>div:last-child{margin:10px 0 2px;padding:8px 12px;background:var(--coat-soft);box-shadow:inset 3px 0 0 var(--coat);border-radius:0 6px 6px 0;color:var(--ink);font-size:13.5px;line-height:1.7}
-.unc>div:last-child b{font-size:17.5px;font-weight:500;white-space:nowrap}
+.unc .final{margin:10px 0 2px;padding:8px 12px;background:var(--coat-soft);box-shadow:inset 3px 0 0 var(--coat);border-radius:0 6px 6px 0;color:var(--ink);font-size:13.5px;line-height:1.7}
+.unc .final b{font-size:17.5px;font-weight:500;white-space:nowrap}
 .segcheck{margin-top:12px;font-size:13px}
 .segcheck table.data{margin-top:6px}
 .segcheck td:last-child{text-align:left;font-size:12.5px}
@@ -300,3 +300,6 @@ footer{flex:none;background:var(--paper);border-top:1px solid var(--hair);color:
 .kstatus.ok{color:var(--ok)} .kstatus.bad{color:var(--bad)}
 .usage{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:13.5px}
 .usage dt{color:var(--muted)} .usage dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.warn-text{color:var(--bad)!important}
+.ghost.mini{padding:1px 8px;font-size:12px;border-radius:5px}
+.result.unreliable>div:not(.note) b{font-weight:400;color:var(--muted)}

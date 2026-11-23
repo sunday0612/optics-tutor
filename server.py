@@ -6,7 +6,7 @@
 2. /api/chat      把提问转发给 DeepSeek（API Key 只保存在本机）
 3. /api/settings  读取 / 保存 API Key 和模型；/api/test 测试连接
 4. /api/log       记录使用数据；/api/stats 汇总；/api/open-data 打开数据文件夹
-5. /api/report    生成实验报告（Word / 网页），/api/open-reports 打开报告文件夹
+5. /api/report    生成实验报告（Word / 网页），/api/open-reports 打开报告文件夹，/api/report-who 记住报告上的姓名、学号、班级
 
 只用 Python 标准库。开发时也可以单独运行：python server.py，再用浏览器打开显示的地址。
 """
@@ -27,7 +27,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import report
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.7.2"
 
 
 # ---------------- 路径 ----------------
@@ -68,6 +68,13 @@ MAX_REPORT_BODY = 12_000_000          # 实验报告带图片，单独放宽
 SESSION_TOKEN = secrets.token_urlsafe(32)
 DATA_LOCK = threading.RLock()
 LAB_FILE = os.path.join(DATA_DIR, "lab_sessions.json")
+WHO_FILE = os.path.join(DATA_DIR, "report_who.json")   # 导出报告时填写的姓名、学号、班级
+LAB_ROW_LIMIT = {"bm": 1500}                           # 每个实验最多保存的记录条数；刀口扫描每次 30 点，单独放宽
+WHO_KEYS = ("name", "sid", "cls")
+
+
+def row_limit(lab):
+    return LAB_ROW_LIMIT.get(lab, 500)
 MODELS = ("deepseek-chat", "deepseek-reasoner")
 
 
@@ -214,9 +221,16 @@ def save_report(req):
         os.makedirs(folder, exist_ok=True)
         who = report.safe_name((rep.get("student") or {}).get("name", ""), 12)
         base = "%s%s_%s" % (report.safe_name(rep.get("title", "")), "_" + who if who != "实验报告" else "", datetime.now().strftime("%Y%m%d-%H%M%S"))
-        path = os.path.join(folder, base + "." + fmt)
-        with open(path, "wb") as f:
-            f.write(data)
+        for k in range(1, 1000):                        # 同一秒导出多份时加序号，不覆盖已有文件
+            path = os.path.join(folder, base + ("" if k == 1 else "_%d" % k) + "." + fmt)
+            try:
+                with open(path, "xb") as f:
+                    f.write(data)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise OSError("同名报告太多，请清理报告文件夹")
         write_log({"type": "report", "data": {"format": fmt, "title": str(rep.get("title", ""))[:40], "bytes": len(data)}})
         return {"ok": True, "path": path, "name": os.path.basename(path), "b64": base64.b64encode(data).decode("ascii")}, 200
     except (OSError, ValueError, TypeError) as e:
@@ -238,8 +252,8 @@ def load_labs():
 def save_lab(lab, state):
     if lab not in LAB_NAMES or not isinstance(state, dict) or not isinstance(state.get("rows"), list):
         raise ValueError("实验数据格式不正确")
-    if len(state["rows"]) > 500:
-        raise ValueError("每次实验最多保存 500 条记录")
+    if len(state["rows"]) > row_limit(lab):
+        raise ValueError("每次实验最多保存 %d 条记录" % row_limit(lab))
     with DATA_LOCK:
         data = load_labs()
         data[lab] = state
@@ -247,6 +261,32 @@ def save_lab(lab, state):
         with open(temp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, allow_nan=False)
         os.replace(temp, LAB_FILE)
+
+
+def load_who():
+    try:
+        with open(WHO_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return {k: str(data.get(k, ""))[:40] for k in WHO_KEYS} if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_who(req):
+    """保存姓名、学号、班级；三项都为空时删除文件（公用电脑上清除个人信息）。"""
+    who = {k: str(req.get(k, "")).strip()[:40] for k in WHO_KEYS}
+    with DATA_LOCK:
+        if not any(who.values()):
+            try:
+                os.remove(WHO_FILE)
+            except FileNotFoundError:
+                pass
+            return who
+        temp = WHO_FILE + ".tmp"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(who, f, ensure_ascii=False)
+        os.replace(temp, WHO_FILE)
+    return who
 
 
 # ---------------- HTTP ----------------
@@ -296,6 +336,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "实验存档读取失败，请保留存档并检查数据文件"}, 500)
         if path == "/api/stats":
             return self.send_json(summary())
+        if path == "/api/report-who":
+            return self.send_json(load_who())
         return super().do_GET()
 
     def do_POST(self):
@@ -336,6 +378,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"ok": True})
         if self.path == "/api/report":
             return self.send_json(*save_report(req))
+        if self.path == "/api/report-who":
+            try:
+                return self.send_json({"ok": True, "who": save_who(req)})
+            except OSError as e:
+                return self.send_json({"error": str(e)}, 500)
         if self.path == "/api/open-reports":
             try:
                 os.makedirs(report_dir(), exist_ok=True)

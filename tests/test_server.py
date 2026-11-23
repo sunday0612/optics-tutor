@@ -68,6 +68,25 @@ class API(unittest.TestCase):
   st,j=self.req('/api/report',{'format':'docx','report':rep})
   self.assertEqual(st,200); self.assertTrue(j['name'].endswith('.docx')); self.assertTrue(os.path.exists(j['path']))
   self.assertEqual(self.req('/api/report',{'format':'pdf','report':rep})[0],400)
+ def test_report_same_second_not_overwritten(self):
+  from unittest import mock
+  from datetime import datetime as real
+  rep=lambda body:{'title':'同秒','student':{'name':'李四'},'sections':[{'h':'一','blocks':[{'p':[{'t':body}]}]}]}
+  with mock.patch.object(server,'datetime') as dt:
+   dt.now.return_value=real(2026,11,23,9,0,0)
+   a=self.req('/api/report',{'format':'html','report':rep('第一份')})[1]; b=self.req('/api/report',{'format':'html','report':rep('第二份')})[1]
+  self.assertNotEqual(a['path'],b['path']); self.assertTrue(b['name'].endswith('_2.html'))
+  self.assertIn('第一份',Path(a['path']).read_text(encoding='utf-8')); self.assertIn('第二份',Path(b['path']).read_text(encoding='utf-8'))
+ def test_report_who(self):
+  self.assertEqual(self.req('/api/report-who',{'name':' 王五 ','sid':'2025','cls':'光电','x':'ignored'})[0],200)
+  self.assertEqual(self.req('/api/report-who')[1],{'name':'王五','sid':'2025','cls':'光电'})
+  self.assertEqual(self.req('/api/report-who',{'name':'','sid':'','cls':''})[0],200)
+  self.assertEqual(self.req('/api/report-who')[1],{}); self.assertFalse(os.path.exists(server.WHO_FILE))
+ def test_row_limits(self):
+  rows=lambda n:{'rows':[{'z':100,'x':1.0,'P':0.5}]*n,'review':''}
+  self.assertEqual(self.req('/api/labs',{'lab':'bm','state':rows(1500)})[0],200)
+  self.assertEqual(self.req('/api/labs',{'lab':'bm','state':rows(1501)})[0],400)
+  self.assertEqual(self.req('/api/labs',{'lab':'mi','state':rows(501)})[0],400)
  def test_stats_corrupt_line(self):
   Path(server.LOG_FILE).write_text('bad json\n{"type":"quiz","data":[],"time":"today"}\n',encoding='utf-8')
   self.assertEqual(self.req('/api/stats')[0],200)

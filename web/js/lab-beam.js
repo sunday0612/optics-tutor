@@ -7,7 +7,7 @@
  * ===================================================================== */
 const BM = (() => {
   const P='bm', LAM=632.8e-6, F=250, ZL=300, PL=1.2;        // 波长 (mm)、透镜焦距与位置 (mm)、激光功率 (mW)
-  const INST=0.005;                                          // 刀口千分尺的仪器误差限 (mm)
+  const INST=0.005, SPAN=600;                                          // 刀口千分尺的仪器误差限 (mm)
   const s={}; let B=null, timer=0;
   const sgn=()=>Math.random()<.5?-1:1;
 
@@ -64,6 +64,11 @@ const BM = (() => {
     $('#'+P+'-undo').onclick=()=>{ s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; if (s.rows.pop()) stats.records--; table(); render(); };
     $('#'+P+'-clr').onclick=()=>{ stats.records-=s.rows.length; s.rows=[]; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; table(); render(); };
     $('#'+P+'-check').onclick=review;
+    $('#'+P+'-table').addEventListener('click',e=>{ const b=e.target.closest('button[data-del]'); if (!b) return;
+      const [lens,z]=[b.dataset.del[0]==='L', +b.dataset.del.slice(1)], n=s.rows.filter(r=>!!r.lens===lens&&r.z===z).length;
+      if (!confirm(`删除${lens?'透镜后':'直接测量'} z = ${z} mm 的 ${n} 个点？`)) return;
+      s.rows=s.rows.filter(r=>!(!!r.lens===lens&&r.z===z)); stats.records-=n; s.checked=false; s.review=''; $('#'+P+'-review').innerHTML='';
+      logEvent('lab_delete_group',{lab:P,lens,z,n}); table(); render(); });
     table();
     clearInterval(timer); timer=setInterval(()=>{ if (!document.hidden && el.offsetParent!==null){ view(); if (B.is3d()) B.update(); } },600);
   }
@@ -78,11 +83,11 @@ const BM = (() => {
     $('#'+P+'-z').min=zMin(); $('#'+P+'-oz').textContent=s.z+' mm';
     $('#'+P+'-readout').innerHTML=`<div>刀口千分尺读数</div><div class="v">${s.x.toFixed(3)} mm</div><div class="f">功率计 ${power().toFixed(4)} mW　导轨位置 z = ${s.z} mm${s.lens?`　透镜在 ${ZL} mm（f = ${F} mm）`:''}</div>`;
     drawStrip($('#'+P+'-drum'), s.x*100, {px:6, label:k=>(k/100).toFixed(1)});
-    const g=groups(), done=m=>g.filter(x=>x.lens===m&&x.fit).length;
+    const g=groups(), done=m=>g.filter(x=>x.lens===m&&x.fit).length, zs=g.filter(x=>!x.lens&&x.fit).map(x=>x.z), span=zs.length?Math.max(...zs)-Math.min(...zs):0, L=done(true)>=4?hyper(g,true):null;
     renderSteps(P,[
       [done(false)>=1,'<b>刀口扫描</b>：选一个导轨位置 z，刀口从光束外（读数最大）慢慢推进到全部挡住（读数为零），沿途记录 10 个以上的点，透过率 90%～10% 之间要多记几个。'],
-      [done(false)>=5,`<b>改变位置</b>：在导轨上分散地选 5 个以上的位置（近处、远处都要有），每个位置都扫描一次（已完成 ${Math.min(done(false),5)}/5）。`],
-      [done(true)>=5,`<b>进阶：透镜后的束腰</b>：切到“放透镜后”，先粗略找到光斑最小的位置，在它两侧各选几个位置扫描，至少 5 个（已完成 ${Math.min(done(true),5)}/5）。`],
+      [done(false)>=5&&span>=SPAN,`<b>改变位置</b>：在导轨上分散地选 5 个以上的位置（近处、远处都要有，跨度至少 ${SPAN} mm），每个位置都扫描一次（已完成 ${Math.min(done(false),5)}/5，跨度 ${span} mm）。`],
+      [done(true)>=5&&!!L&&!L.invalid&&L.reliable,`<b>进阶：透镜后的束腰</b>：切到“放透镜后”，先粗略找到光斑最小的位置，在它两侧各选至少 2 个位置扫描，并且离它一个瑞利长度以外也要有点，共 5 个以上（已完成 ${Math.min(done(true),5)}/5）。`],
       [s.checked,'<b>处理数据</b>：拟合每个位置的光斑半径，再对 w² 与 z 作二次拟合求束腰、发散角和 M²，然后让 AI 助教检查。']]);
   }
   function bench(){
@@ -138,6 +143,8 @@ const BM = (() => {
   }
   /* 电动平移台：按步长推进 30 步，每步记录一次 */
   function scan(){
+    const n=Math.min(30, Math.max(0, Math.ceil((8-s.x)/s.scanStep-1e-9)));
+    if (LabStore.full(P,n)) return;
     for (let i=0;i<30&&s.x<8;i++){ record(true); move(s.scanStep); s.x=+s.x.toFixed(3); }
     s.checked=false; s.review=''; $('#'+P+'-review').innerHTML=''; logEvent('lab_record',{lab:P,n:s.rows.length,scan:true}); table(); render();
   }
@@ -189,8 +196,16 @@ const BM = (() => {
       u[key]=Ci?Math.sqrt(Math.max(0,g.reduce((acc,gi,i)=>acc+g.reduce((a2,gj,j)=>a2+gi*Ci[i][j]*gj,0),0)*s2)):null; }
     const near=ok.reduce((p2,g)=>g.z<p2.z?g:p2), far=ok.reduce((p2,g)=>g.z>p2.z?g:p2);
     const two=far.z>near.z?2*(far.fit.w-near.fit.w)/(far.z-near.z):null;
-    const t=beam(lens);
-    return {n:ok.length, ...v, u, two, truth:{W0:t.W0, z0:t.z0, zR:t.zR, M2:s.M2, th:t.W0/t.zR}, side:lens?{lo:ok.filter(g=>g.z<v.z0).length, hi:ok.filter(g=>g.z>v.z0).length}:null};
+    const t=beam(lens), side=lens?{lo:ok.filter(g=>g.z<v.z0).length, hi:ok.filter(g=>g.z>v.z0).length}:null;
+    /* 拟合能算出数，不代表结果可信：检查物理下限、测点分布和不确定度 */
+    const span=Math.max(...zs)-Math.min(...zs), reach=Math.max(...zs.map(z=>Math.abs(z-v.z0))), why=[];
+    if (ok.length<5) why.push(`只有 ${ok.length} 个位置，二次拟合只剩 ${ok.length-3} 个自由度，不确定度估计不可靠（至少 5 个位置）`);
+    if (v.M2<1) why.push(`M² = ${v.M2.toFixed(2)}，小于理想高斯光束的物理下限 1`);
+    if (!lens && span<SPAN) why.push(`测量位置只跨了 ${span} mm（至少 ${SPAN} mm）；束腰在激光器内部，要靠外推，位置太集中时外推不可靠`);
+    if (lens && (side.lo<2||side.hi<2)) why.push(`束腰两侧的测量位置不均衡（前侧 ${side.lo} 个、后侧 ${side.hi} 个，每侧至少 2 个）`);
+    if (lens && reach<v.zR) why.push(`离束腰最远的测点只有 ${reach.toFixed(0)} mm，不到一个瑞利长度（约 ${v.zR.toFixed(0)} mm），测不出远场发散`);
+    if (u.M2!=null && u.M2>0.3*v.M2) why.push('M² 的相对不确定度超过 30%');
+    return {n:ok.length, ...v, u, two, span, why, reliable:!why.length, truth:{W0:t.W0, z0:t.z0, zR:t.zR, M2:s.M2, th:t.W0/t.zR}, side};
   }
   function calc(){ const gs=groups(); return {gs, D:hyper(gs,false), L:hyper(gs,true)}; }
 
@@ -198,17 +213,19 @@ const BM = (() => {
     save(); renderStats();
     if (!s.rows.length){ $('#'+P+'-table').innerHTML='<div class="empty">还没有数据。选好导轨位置后，把刀口从光束外慢慢推进，沿途记录功率（或用电动扫描）。</div>'; $('#'+P+'-result').innerHTML=''; return; }
     const c=calc();
-    $('#'+P+'-table').innerHTML=`<div class="fbtable"><table class="data"><tr><th></th><th>z / mm</th><th>点数</th><th>w（拟合）/ mm</th><th>w（90%–10%）/ mm</th><th>说明</th></tr>`+
-      c.gs.map(g=>`<tr${g.fit?'':' class="warn"'}><td>${g.lens?'透镜':'直接'}</td><td>${g.z}</td><td>${g.n}</td><td>${g.fit?Unc.format(g.fit.w,g.fit.u,'').text:'—'}</td><td>${g.fit?g.fit.w1090.toFixed(3):g.bad&&g.bad.w1090!=null?g.bad.w1090.toFixed(3):'—'}</td><td style="text-align:left">${g.fit?(s.checked?`真实 ${g.wTrue.toFixed(3)}`:''):g.n<6?'点太少（至少 6 个）':g.bad?`透过率 12%～88% 之间只有 ${g.bad.inMid} 个点，或没扫到全挡/全透`:'拟合失败'}</td></tr>`).join('')+'</table></div>';
+    $('#'+P+'-table').innerHTML=`<div class="fbtable"><table class="data"><tr><th></th><th>z / mm</th><th>点数</th><th>w（拟合）/ mm</th><th>w（90%–10%）/ mm</th><th>说明</th><th></th></tr>`+
+      c.gs.map(g=>`<tr${g.fit?'':' class="warn"'}><td>${g.lens?'透镜':'直接'}</td><td>${g.z}</td><td>${g.n}</td><td>${g.fit?Unc.format(g.fit.w,g.fit.u,'').text:'—'}</td><td>${g.fit?g.fit.w1090.toFixed(3):g.bad&&g.bad.w1090!=null?g.bad.w1090.toFixed(3):'—'}</td><td style="text-align:left">${g.fit?(s.checked?`真实 ${g.wTrue.toFixed(3)}`:''):g.n<6?'点太少（至少 6 个）':g.bad?`透过率 12%～88% 之间只有 ${g.bad.inMid} 个点，或没扫到全挡/全透`:'拟合失败'}</td><td><button class="ghost mini" data-del="${g.lens?'L':'D'}${g.z}" title="删除这个位置的全部点" aria-label="删除${g.lens?'透镜后':'直接测量'} z = ${g.z} mm 的数据">删除</button></td></tr>`).join('')+'</table></div>'+
+      `<div class="hint">共 ${s.rows.length} 个点，最多保存 ${LabStore.limit(P)} 个；某个位置扫坏了可以整组删除后重扫。</div>`;
     const part=(h,lens)=>{
       if (!h) return `<div class="hint" style="margin-top:6px">${lens?'透镜后':'直接测量'}：至少需要 4 个位置的光斑半径才能做二次拟合。</div>`;
       if (h.invalid) return `<div class="note">${lens?'透镜后':'直接测量'}：二次拟合得不到合理的束腰（开口向下或 W₀² < 0），说明位置太集中或某个点测错了，多换几个位置。</div>`;
       const fm=(v,uu,unit,k=1)=>uu!=null&&uu>0?Unc.format(v*k,uu*k,unit).text:`${(v*k).toPrecision(4)} ${unit}`;
-      return `<div class="result">${lens?'透镜后（进阶）':'直接测量'}：w² 对 z 二次拟合（${h.n} 个位置）
+      const fix=lens?'先找到光斑最小的位置，在它前后各测 2～3 个位置，再在离它一个瑞利长度以外（前后各约 100～200 mm）补测几个点。':`把测量位置分散到整条导轨：近处（100～300 mm）和远处（1500 mm 以上）都要有。`;
+      const warn=h.reliable?'':`<div class="note"><b>这组${lens?'透镜后':'直接测量'}的结果不可信，不能作为实验结论。</b>${h.why.join('；')}。建议补测：${fix}</div>`;
+      return `<div class="result${h.reliable?'':' unreliable'}">${lens?'透镜后（进阶）':'直接测量'}：w² 对 z 二次拟合（${h.n} 个位置）${warn}
         <div>束腰半径 W₀ = <b>${fm(h.W0,h.u.W0,'mm')}</b>，束腰位置 z₀ = ${fm(h.z0,h.u.z0,'mm')}${!lens&&h.z0<0?'（在激光器内部，靠外推得到）':''}</div>
         <div>全发散角 θ = 2√c = <b>${fm(2*h.th,h.u.th!=null?2*h.u.th:null,'mrad',1000)}</b>${h.two!=null&&!lens?`；只用最近、最远两点估算 ${(h.two*1000).toFixed(3)} mrad（没到远场，两点法偏小）`:''}</div>
-        <div>瑞利长度 z<sub>R</sub> = ${fm(h.zR,h.u.zR,'mm')}，<span class="big">M² = ${fm(h.M2,h.u.M2,'')}</span></div>
-        ${lens&&h.side&&(h.side.lo<2||h.side.hi<2)?'<div class="note">束腰两侧的测量点不够均衡（每侧至少 2 个），拟合会偏。</div>':''}
+        <div>瑞利长度 z<sub>R</sub> = ${fm(h.zR,h.u.zR,'mm')}，${h.reliable?`<span class="big">M² = ${fm(h.M2,h.u.M2,'')}</span>`:`M² = ${fm(h.M2,h.u.M2,'')}（不可信）`}</div>
         ${s.checked?`<div>真实值：W₀ = ${h.truth.W0.toFixed(3)} mm，z₀ = ${h.truth.z0.toFixed(0)} mm，全发散角 ${(2*h.truth.th*1000).toFixed(3)} mrad，M² = ${h.truth.M2.toFixed(3)}</div>`:'<div class="hint">真实参数在 AI 批改后显示。</div>'}
         <canvas class="chart" id="${P}-ch-${lens?1:0}"></canvas></div>`;
     };
@@ -234,10 +251,10 @@ const BM = (() => {
   function offline(c){
     const p=[], bad=c.gs.filter(g=>!g.fit);
     if (bad.length) p.push(`${bad.map(g=>`${g.lens?'透镜后':''}z=${g.z}`).join('、')} mm 的扫描没法拟合（点太少或没覆盖透过率 10%～90%）`);
-    if (c.D && !c.D.invalid){ const zs=c.gs.filter(g=>!g.lens&&g.fit).map(g=>g.z); if (Math.max(...zs)-Math.min(...zs)<800) p.push('直接测量的位置太集中，应该分散到整条导轨'); }
-    if (c.L && !c.L.invalid && c.L.side && (c.L.side.lo<2||c.L.side.hi<2)) p.push('透镜后的测量点没有分布在束腰两侧');
+    if (c.D && !c.D.invalid && !c.D.reliable) p.push('直接测量的结果不可信：'+c.D.why.join('，'));
+    if (c.L && !c.L.invalid && !c.L.reliable) p.push('透镜后的结果不可信：'+c.L.why.join('，'));
     if (!c.L) p.push('还没做进阶的透镜部分，直接测量时束腰在激光器内部，W₀ 和 M² 都靠外推，不确定度大');
-    const t=(h,name)=>h&&!h.invalid?`${name}：W₀ = ${h.W0.toFixed(3)} mm（真实 ${h.truth.W0.toFixed(3)}），全发散角 ${(2*h.th*1000).toFixed(3)} mrad（真实 ${(2*h.truth.th*1000).toFixed(3)}），M² = ${h.M2.toFixed(2)}（真实 ${h.truth.M2.toFixed(2)}）。`:'';
+    const t=(h,name)=>h&&!h.invalid?`${name}${h.reliable?'':'（不可信）'}：W₀ = ${h.W0.toFixed(3)} mm（真实 ${h.truth.W0.toFixed(3)}），全发散角 ${(2*h.th*1000).toFixed(3)} mrad（真实 ${(2*h.truth.th*1000).toFixed(3)}），M² = ${h.M2.toFixed(2)}（真实 ${h.truth.M2.toFixed(2)}）。`:'';
     return [`【总评】${t(c.D,'直接测量')}${t(c.L,'透镜后')}`,
       '【数据问题】'+(p.length?p.join('；')+'。':'没有发现明显问题。'),
       '【误差来源】功率计读数起伏、刀口位置读数误差、扫描点在陡峭段太少、导轨位置读数误差；直接测量时束腰在激光器内部，二次拟合要外推，W₀、z₀ 和 M² 对每个 w 的误差都很敏感；两点法求发散角时没有到远场会偏小。',
@@ -249,8 +266,8 @@ const BM = (() => {
       check:()=>(c.D&&!c.D.invalid)||(c.L&&!c.L.invalid)?'':'至少需要在 4 个位置得到可拟合的刀口扫描，二次拟合才能给出束腰和 M²。',
       prompt:()=>`你是大学激光原理实验课的助教，正在批改大一学生“刀口法测激光光束半径、发散角与 M²”的实验数据。He-Ne 激光 λ = 632.8 nm；进阶部分在 ${ZL} mm 处放 f = ${F} mm 透镜。
 各位置的刀口扫描结果（拟合的光斑半径；真实值学生看不到）：${c.gs.map(g=>`${g.lens?'透镜后':'直接'} z=${g.z} mm：${g.n} 点，${g.fit?`w=${g.fit.w.toFixed(4)}±${(g.fit.u||0).toFixed(4)} mm（90/10 法 ${g.fit.w1090.toFixed(4)}），透过率 12%～88% 之间 ${g.fit.inMid} 点，真实 ${g.wTrue.toFixed(4)}`:'无法拟合'}`).join('；')}。
-${[['直接测量',c.D],['透镜后',c.L]].map(([n,h])=>h&&!h.invalid?`${n}二次拟合：W₀=${h.W0.toFixed(4)} mm，z₀=${h.z0.toFixed(0)} mm，全发散角 ${(2*h.th*1000).toFixed(3)} mrad，zR=${h.zR.toFixed(0)} mm，M²=${h.M2.toFixed(3)}${h.u.M2!=null?`（u=${h.u.M2.toFixed(3)}）`:''}；两点法发散角 ${h.two!=null?(h.two*1000).toFixed(3):'—'} mrad。真实：W₀=${h.truth.W0.toFixed(4)} mm，z₀=${h.truth.z0.toFixed(0)} mm，全发散角 ${(2*h.truth.th*1000).toFixed(3)} mrad，M²=${h.truth.M2.toFixed(3)}。`:`${n}：没有有效的二次拟合。`).join('\n')}
-请给出批改意见：中文，250~350 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。说明直接测量与透镜后两种方法得到的 W₀、M² 哪个更可信及原因（束腰位置、是否外推、是否覆盖束腰两侧），检查扫描点是否覆盖陡峭段。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
+${[['直接测量',c.D],['透镜后',c.L]].map(([n,h])=>h&&!h.invalid?`${n}二次拟合：W₀=${h.W0.toFixed(4)} mm，z₀=${h.z0.toFixed(0)} mm，全发散角 ${(2*h.th*1000).toFixed(3)} mrad，zR=${h.zR.toFixed(0)} mm，M²=${h.M2.toFixed(3)}${h.u.M2!=null?`（u=${h.u.M2.toFixed(3)}）`:''}；测量位置跨度 ${h.span} mm；${h.reliable?'程序检查未发现分布问题':'程序判定结果不可信：'+h.why.join('，')}；两点法发散角 ${h.two!=null?(h.two*1000).toFixed(3):'—'} mrad。真实：W₀=${h.truth.W0.toFixed(4)} mm，z₀=${h.truth.z0.toFixed(0)} mm，全发散角 ${(2*h.truth.th*1000).toFixed(3)} mrad，M²=${h.truth.M2.toFixed(3)}。`:`${n}：没有有效的二次拟合。`).join('\n')}
+请给出批改意见：中文，250~350 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。说明直接测量与透镜后两种方法得到的 W₀、M² 哪个更可信及原因（束腰位置、是否外推、是否覆盖束腰两侧），检查扫描点是否覆盖陡峭段；程序判定不可信的结果，要明确告诉学生不能作为结论，并说明为什么、该在哪里补测。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }

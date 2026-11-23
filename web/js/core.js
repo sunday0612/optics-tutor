@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.7.2';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -88,14 +88,23 @@ aiDetect();
 // Store experiments on disk through the backend: desktop ports change between launches.
 const LabStore = {
   data:{}, queue:Promise.resolve(), failed:false,
+  /* 每个实验最多保存的记录条数（与 server.py 的 LAB_ROW_LIMIT 一致） */
+  limit:p=>({bm:1500})[p]||500,
+  live:{},
+  room(p,s=this.live[p]){ return s?this.limit(p)-s.rows.length:Infinity; },
+  /* 记录满额时给出明确提示（不再悄悄保存失败） */
+  full(p,need=1){ const left=this.room(p); if (left>=need) return false;
+    $('#'+p+'-save-status').textContent=left<=0?`记录已达上限 ${this.limit(p)} 条，请先撤销、删除部分数据或清空后再记录`:`还能记录 ${left} 条，不够这一次的 ${need} 条；请先删除部分数据`;
+    $('#'+p+'-save-status').classList.add('warn-text'); return true; },
   ready:AI.ready.then(async()=>{
     if (!AI.backend) return;
     try { const r=await fetch('api/labs'); if(!r.ok) throw Error('读取失败'); LabStore.data=await r.json(); }
     catch(e){ LabStore.failed=true; alert('实验存档读取失败。请重新打开软件，以免覆盖原记录。'); }
   }),
   restore(p,s){
+    this.live[p]=s;
     const saved=this.data[p];
-    if(saved && Array.isArray(saved.rows) && saved.rows.length<=500){
+    if(saved && Array.isArray(saved.rows) && saved.rows.length<=this.limit(p)){
       const keys=Object.keys(s);
       if(keys.every(k=>k in saved && (typeof s[k]!=='number' || Number.isFinite(saved[k])))) {
         for(const k of keys) s[k]=saved[k];
@@ -105,7 +114,9 @@ const LabStore = {
     }
   },
   save(p,s){
+    this.live[p]=s; $('#'+p+'-save-status')?.classList.remove('warn-text');
     if(!AI.backend || this.failed) return;
+    if(s.rows.length>this.limit(p)){ $('#'+p+'-save-status').textContent=`记录已超过上限 ${this.limit(p)} 条，超出的部分无法保存，请撤销或删除一部分数据`; return; }
     const state=JSON.parse(JSON.stringify(s)); this.data[p]=state;
     this.queue=this.queue.then(async()=>{
       // keepalive 让关窗时的最后一次保存也能发出；Chrome 限制未读完的 keepalive 响应共 64 KB，所以每次都要读完响应
@@ -117,6 +128,9 @@ const LabStore = {
     }).catch(()=>{ $('#'+p+'-save-status').textContent='保存失败，请保持软件打开并再次记录或批改以重试'; });
   }
 };
+/* 所有实验的“记录读数”按钮：满额时拦下点击并提示 */
+document.addEventListener('click',e=>{ const b=e.target.closest?.('button[id$="-rec"]'); if (!b) return;
+  if (LabStore.full(b.id.slice(0,-4))){ e.stopPropagation(); e.preventDefault(); } },true);
 
 async function aiText(prompt, {json=false}={}){
   await AI.ready;
@@ -168,7 +182,7 @@ function labShell(p, {title, principle, right}){
       <div class="hint" style="margin-top:0">包含实验原理、步骤完成情况、数据表、计算结果与不确定度、图表、当前视场和 AI 评语。可以先做 AI 批改再导出。</div>
       <div class="row rep-who"><input data-rep="name" placeholder="姓名（可不填）"><input data-rep="sid" placeholder="学号"><input data-rep="cls" placeholder="班级"></div>
       <div class="row" style="flex-wrap:wrap"><button class="primary" data-report="docx" data-lab="${p}">导出 Word 文档</button><button class="ghost" data-report="html" data-lab="${p}">导出网页（可打印为 PDF）</button>
-        <button class="ghost" data-open-reports hidden>打开报告文件夹</button></div>
+        <button class="ghost" data-open-reports hidden>打开报告文件夹</button><button class="ghost" data-clear-who title="公用电脑上用完后可以清除">清除个人信息</button></div>
       <div class="hint rep-status" role="status"></div>
     </div>
   </section>
@@ -195,14 +209,24 @@ const stepsOpen={};
 function renderSteps(p, list){
   const now=list.findIndex(x=>!x[0]), open=stepsOpen[p]||(stepsOpen[p]=new Set());
   const split=t=>{ const i=t.indexOf('</b>'); if (!t.startsWith('<b>')||i<0) return [t,'']; return [t.slice(3,i), t.slice(i+4).replace(/^[：:]\s*/,'')]; };
-  $('#'+p+'-steps').innerHTML=list.map(([ok,t],i)=>{ const [title,desc]=split(t), cls=ok?'done':i===now?'now':'later';
-    return `<li class="${cls}${open.has(i)?' open':''}" data-i="${i}"${cls!=='now'&&desc?' tabindex="0" role="button" aria-expanded="'+open.has(i)+'"':''}><span class="s">${ok?'✓':i+1}</span><span class="t"><b>${title}</b>${desc?`<span class="d">${desc}</span>`:''}</span></li>`; }).join('');
+  /* 原地更新每个 <li>，不重建整个列表：键盘焦点停在某一步上时，调仪器触发重绘也不会丢焦点 */
+  const ol=$('#'+p+'-steps');
+  while (ol.children.length<list.length) ol.appendChild(document.createElement('li'));
+  while (ol.children.length>list.length) ol.lastElementChild.remove();
+  list.forEach(([ok,t],i)=>{ const [title,desc]=split(t), cls=ok?'done':i===now?'now':'later', li=ol.children[i];
+    const c=cls+(open.has(i)?' open':''), html=`<span class="s">${ok?'✓':i+1}</span><span class="t"><b>${title}</b>${desc?`<span class="d">${desc}</span>`:''}</span>`;
+    if (li.className!==c) li.className=c;
+    li.dataset.i=i;
+    if (li._html!==html){ li.innerHTML=html; li._html=html; }
+    if (cls!=='now'&&desc){ li.tabIndex=0; li.setAttribute('role','button'); li.setAttribute('aria-expanded',open.has(i)); }
+    else { li.tabIndex=-1; li.removeAttribute('role'); li.removeAttribute('aria-expanded'); }
+  });
   const prog=$('#'+p+'-prog'); if (prog) prog.textContent=now<0?'全部完成':`第 ${now+1} 步 / 共 ${list.length} 步`;
 }
 document.addEventListener('click',e=>{ const li=e.target.closest('.steps li[data-i]'); if (!li||li.classList.contains('now')||!li.querySelector('.d')) return;
   const p=li.parentElement.id.replace(/-steps$/,''), i=+li.dataset.i, set=stepsOpen[p]||(stepsOpen[p]=new Set());
   set.has(i)?set.delete(i):set.add(i); li.classList.toggle('open'); li.setAttribute('aria-expanded',set.has(i)); });
-document.addEventListener('keydown',e=>{ if ((e.key==='Enter'||e.key===' ')&&e.target.matches?.('.steps li[tabindex]')){ e.preventDefault(); e.target.click(); } });
+document.addEventListener('keydown',e=>{ if ((e.key==='Enter'||e.key===' ')&&e.target.matches?.('.steps li[role=button]')){ e.preventDefault(); e.target.click(); } });
 /* 装置区：“三维模型 / 示意图”切换。build(viewer, getState) 返回 update() */
 function benchArea(P, build, getState, {cap3d='三维模型'}={}){
   const canvas=$('#'+P+'-bench'), wrap=canvas.parentElement, cap=wrap.querySelector('.caption'), cap2d=cap.textContent;
@@ -363,9 +387,11 @@ const Report = (() => {
     return {title, version:APP_VERSION, date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`, student:who, sections};
   }
   async function exportReport(P, fmt, card){
-    const st=card.querySelector('.rep-status'); st.textContent='正在生成报告…';
+    const st=card.querySelector('.rep-status'), btns=card.querySelectorAll('[data-report]');
+    if (card.dataset.busy) return;                                   // 生成期间不重复导出
+    card.dataset.busy=1; btns.forEach(b=>{ b.disabled=true; }); st.textContent='正在生成报告…';
     const rep=collect(P);
-    try { localStorage.setItem('gy-report-who', JSON.stringify(rep.student)); } catch(e){}
+    saveWho(rep.student);
     try {
       const r=await fetch('api/report',{method:'POST',headers:apiHeaders(),body:JSON.stringify({format:fmt,report:rep})});
       const j=await r.json().catch(()=>({error:'服务器没有返回结果'}));
@@ -377,13 +403,26 @@ const Report = (() => {
         const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8],{type:fmt==='docx'?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'text/html'})); a.download=j.name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
       }
     } catch(e){ st.textContent='导出失败：'+e.message; }
+    finally { delete card.dataset.busy; btns.forEach(b=>{ b.disabled=false; }); }
   }
   document.addEventListener('click',e=>{
     const b=e.target.closest('[data-report]'); if (b){ exportReport(b.dataset.lab,b.dataset.report,b.closest('.report-card')); return; }
     const o=e.target.closest('[data-open-reports]'); if (o) fetch('api/open-reports',{method:'POST',headers:apiHeaders(),body:'{}'});
   });
-  /* 记住上次填的姓名、学号、班级 */
-  document.addEventListener('focusin',e=>{ const i=e.target.closest?.('[data-rep]'); if (!i||i.dataset.filled) return;
-    try { const w=JSON.parse(localStorage.getItem('gy-report-who')||'{}'); i.closest('.report-card').querySelectorAll('[data-rep]').forEach(x=>{ x.dataset.filled=1; if (!x.value&&w[x.dataset.rep]) x.value=w[x.dataset.rep]; }); } catch(err){} });
+  /* 记住上次填的姓名、学号、班级：存在本地数据目录（桌面版每次启动端口不同，浏览器存储会丢） */
+  const WHO=['name','sid','cls'];
+  const fillWho=w=>document.querySelectorAll('[data-rep]').forEach(x=>{ x.value=w[x.dataset.rep]||''; });
+  function saveWho(w){ if (!AI.backend) return;
+    fetch('api/report-who',{method:'POST',headers:apiHeaders(),body:JSON.stringify(w)}).then(r=>r.text()).catch(()=>{}); }
+  LabStore.ready.then(async()=>{ if (!AI.backend) return;
+    try { const r=await fetch('api/report-who'); if (!r.ok) return; const w=await r.json();
+      if (WHO.some(k=>w[k]) && ![...document.querySelectorAll('[data-rep]')].some(x=>x.value)) fillWho(w); } catch(e){} });
+  /* 一处修改，所有实验的报告栏同步 */
+  document.addEventListener('change',e=>{ const i=e.target.closest?.('[data-rep]'); if (!i) return;
+    document.querySelectorAll(`[data-rep="${i.dataset.rep}"]`).forEach(x=>{ if (x!==i) x.value=i.value; });
+    const w={}; WHO.forEach(k=>{ w[k]=(document.querySelector(`[data-rep="${k}"]`)?.value||'').trim(); }); saveWho(w); });
+  document.addEventListener('click',e=>{ if (!e.target.closest?.('[data-clear-who]')) return;
+    fillWho({}); saveWho({name:'',sid:'',cls:''});
+    const st=e.target.closest('.report-card').querySelector('.rep-status'); st.textContent='已清除本机保存的姓名、学号和班级。'; });
   return {collect};
 })();
