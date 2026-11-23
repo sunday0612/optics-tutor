@@ -339,7 +339,7 @@ const PL = (() => {
   /* I 与 cos²(θ − θ∥) 的关系：应为直线 */
   function chart(m){
     const cv=$('#'+P+'-chart'), width=cv?.clientWidth;
-    if (!width) return;
+    if (!width){ if (cv) whenVisible(cv,()=>chart(m)); return; }
     const size=`${width}×${window.devicePixelRatio||1}`;
     if (cv.dataset.drawnSize===size) return;
     const {ctx,dpr,W,H}=setup(cv,170); ctx.setTransform(dpr,0,0,dpr,0,0);

@@ -333,7 +333,7 @@ const FB = (() => {
   }
   /* 每圈损耗随半径的变化（对数纵轴）+ 拟合曲线 */
   function chart(c){
-    const cv=$('#'+P+'-chart'); if (!cv||!cv.clientWidth) return;
+    const cv=$('#'+P+'-chart'); if (!cv) return; if (!cv.clientWidth) return whenVisible(cv,()=>chart(c));
     const {ctx,dpr,W,H}=setup(cv,170); ctx.setTransform(dpr,0,0,dpr,0,0);
     const x0=46, x1=W-12, y0=H-28, y1=10, Rmin=3, Rmax=7.5;
     const Ls=c.pts.map(p=>p.L), lmin=Math.floor(Math.log10(Math.min(...Ls,c.fit.Lfit(Rmax))))-0, lmax=Math.ceil(Math.log10(Math.max(...Ls,c.fit.Lfit(Rmin))));

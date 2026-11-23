@@ -237,7 +237,7 @@ const LD = (() => {
     return {ctx,X,Y};
   }
   function chartPI(c){
-    const cv=$('#'+P+'-chart'); if (!cv||!cv.clientWidth) return;
+    const cv=$('#'+P+'-chart'); if (!cv) return; if (!cv.clientWidth) return whenVisible(cv,()=>chartPI(c));
     const imax=Math.max(...c.groups.flatMap(g=>g.rows.map(r=>r.I)),10), {ctx,X,Y}=axes(cv,Math.ceil(imax/10)*10,PMAX+1,'I / mA','P / mW');
     c.groups.forEach((g,i)=>{ const col=COLORS[TEMPS.indexOf(g.Ts)%COLORS.length]; ctx.fillStyle=col; ctx.strokeStyle=col;
       g.rows.forEach(r=>{ ctx.beginPath(); ctx.arc(X(r.I),Y(Math.min(r.P,PMAX+1)),2.4,0,Math.PI*2); ctx.fill(); });
@@ -245,7 +245,7 @@ const LD = (() => {
       ctx.fillText(`${g.Ts} °C`,X(0)+8+i*48,Y(PMAX)+4); });
   }
   function chartPD(c){
-    const cv=$('#'+P+'-chart2'); if (!cv||!cv.clientWidth) return;
+    const cv=$('#'+P+'-chart2'); if (!cv) return; if (!cv.clientWidth) return whenVisible(cv,()=>chartPD(c));
     const pm=Math.max(...c.pd.pairs.map(x=>x.pm)), im=Math.max(...c.pd.pairs.map(x=>x.pd)), {ctx,X,Y}=axes(cv,pm*1.1,im*1.1,'P / mW','I_ph / µA');
     ctx.strokeStyle='#b5442c'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(X(0),Y(Math.max(0,c.pd.int))); ctx.lineTo(X(pm*1.1),Y(c.pd.int+c.pd.R*1000*pm*1.1)); ctx.stroke();
     ctx.fillStyle='#1d1e21'; c.pd.pairs.forEach(x=>{ ctx.beginPath(); ctx.arc(X(x.pm),Y(x.pd),3,0,Math.PI*2); ctx.fill(); });

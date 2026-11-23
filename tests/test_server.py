@@ -47,6 +47,27 @@ class API(unittest.TestCase):
   self.assertEqual(got['FileVersion'],server.APP_VERSION); self.assertEqual(got['ProductVersion'],server.APP_VERSION)
   filevers=eval(text.split('\n',1)[1],{**env,'VSVersionInfo':lambda ffi,kids:ffi,'FixedFileInfo':lambda **k:k['filevers']})
   self.assertEqual(filevers,tuple(int(x) for x in server.APP_VERSION.split('.'))+(0,))
+ def test_report_docx_and_html(self):
+  import report, zipfile, io, base64
+  from xml.etree import ElementTree as ET
+  png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010806000000'
+   '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082')).decode()
+  rep={'title':'测试实验','version':server.APP_VERSION,'date':'2026-11-23 09:00','student':{'name':'张三','sid':'1','cls':''},
+   'sections':[{'h':'一、原理','blocks':[{'p':[{'t':'u'},{'t':'A','sub':True},{'t':' < 1 & 2','b':True}]},{'li':[{'t':'第一步'}],'done':True}]},
+               {'h':'二、数据','blocks':[{'table':[[[{'t':'z'}],[{'t':'w'}]],[[{'t':'100'}],[{'t':'0.44'}]]]},{'img':'data:image/png;base64,'+png,'w':400,'h':200,'cap':'图'},{'img':'data:image/png;base64,@@@'}]}]}
+  z=zipfile.ZipFile(io.BytesIO(report.build_docx(rep)))
+  self.assertIn('word/media/image1.png',z.namelist()); self.assertNotIn('word/media/image2.png',z.namelist())
+  doc=ET.fromstring(z.read('word/document.xml'))                     # XML 合法（含 < & 等需要转义的字符）
+  W='{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+  self.assertTrue(any(v.get(W+'val')=='subscript' for v in doc.iter(W+'vertAlign')))
+  self.assertEqual(len(list(doc.iter(W+'tbl'))),1)
+  for name in ('[Content_Types].xml','_rels/.rels','word/_rels/document.xml.rels','word/styles.xml'): ET.fromstring(z.read(name))
+  h=report.build_html(rep)
+  self.assertIn('<sub>A</sub>',h); self.assertIn('&lt; 1 &amp; 2',h); self.assertIn('张三',h)
+  self.assertEqual(report.safe_name('a/b:c*?'),'abc')
+  st,j=self.req('/api/report',{'format':'docx','report':rep})
+  self.assertEqual(st,200); self.assertTrue(j['name'].endswith('.docx')); self.assertTrue(os.path.exists(j['path']))
+  self.assertEqual(self.req('/api/report',{'format':'pdf','report':rep})[0],400)
  def test_stats_corrupt_line(self):
   Path(server.LOG_FILE).write_text('bad json\n{"type":"quiz","data":[],"time":"today"}\n',encoding='utf-8')
   self.assertEqual(self.req('/api/stats')[0],200)

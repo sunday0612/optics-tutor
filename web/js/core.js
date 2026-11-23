@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -163,8 +163,23 @@ function labShell(p, {title, principle, right}){
       <button class="primary" id="${p}-check">检查我的数据</button>
       <div id="${p}-review" style="margin-top:10px"></div>
     </div>
+    <div class="card report-card">
+      <h2><span class="n">报告</span>导出实验报告</h2>
+      <div class="hint" style="margin-top:0">包含实验原理、步骤完成情况、数据表、计算结果与不确定度、图表、当前视场和 AI 评语。可以先做 AI 批改再导出。</div>
+      <div class="row rep-who"><input data-rep="name" placeholder="姓名（可不填）"><input data-rep="sid" placeholder="学号"><input data-rep="cls" placeholder="班级"></div>
+      <div class="row" style="flex-wrap:wrap"><button class="primary" data-report="docx" data-lab="${p}">导出 Word 文档</button><button class="ghost" data-report="html" data-lab="${p}">导出网页（可打印为 PDF）</button>
+        <button class="ghost" data-open-reports hidden>打开报告文件夹</button></div>
+      <div class="hint rep-status" role="status"></div>
+    </div>
   </section>
   <section><div class="card scope">${right}</div></section>`;
+}
+/* 图表画布所在的实验还没打开时宽度为 0，等它显示出来再画（否则恢复存档后图是空的） */
+function whenVisible(cv, draw){
+  if (!cv || cv._waiting || typeof ResizeObserver==='undefined') return;
+  cv._waiting=true;
+  const ro=new ResizeObserver(()=>{ if (cv.clientWidth){ ro.disconnect(); cv._waiting=false; if (cv.isConnected) draw(); } });
+  ro.observe(cv);
 }
 /* 转动控件：按住按钮连续转动 + 速度选择 + 辅助开关 */
 function turnControls(p, speeds, {assist='辅助计数', left='◀ 反转', rightLabel='正转 ▶'}={}){
@@ -273,3 +288,92 @@ async function runReview(p, {check, prompt, offline}){
 /* 角度工具（分光计用） */
 const angDiff = (a,b) => { let d=((a-b)%360+540)%360-180; return Math.abs(d); };     // 两个读数之间的夹角，自动处理跨 0° 的情况
 const dms = deg => { deg=((deg%360)+360)%360; let d=Math.floor(deg), m=Math.round((deg-d)*60); if (m===60){ d=(d+1)%360; m=0; } return `${d}°${String(m).padStart(2,'0')}′`; };
+
+
+/* ===================================================================
+ * 实验报告：从实验页面整理出原理、步骤、数据表、结果、图表和评语，交给服务器生成 Word / 网页
+ * =================================================================== */
+const Report = (() => {
+  const INLINE=new Set(['B','STRONG','I','EM','SPAN','SUB','SUP','S','LABEL','OUTPUT','A','CODE','SMALL','U']);
+  const SKIP=new Set(['BUTTON','INPUT','SELECT','SCRIPT','STYLE','TEXTAREA']);
+  function runsOf(node, f={}, out=[]){
+    for (const n of node.childNodes){
+      if (n.nodeType===3){ const t=n.textContent.replace(/\s+/g,' '); if (t.trim()||(t===' '&&out.length)) out.push({t, ...f}); continue; }
+      if (n.nodeType!==1 || SKIP.has(n.tagName) || n.hidden) continue;
+      if (n.tagName==='BR'){ out.push({t:'\n'}); continue; }
+      runsOf(n, {...f, ...(n.tagName==='B'||n.tagName==='STRONG'?{b:true}:{}), ...(n.tagName==='SUB'?{sub:true}:{}), ...(n.tagName==='SUP'?{sup:true}:{})}, out);
+    }
+    return out;
+  }
+  const tidy=runs=>{ const r=runs.filter(x=>x.t!=='\n'); if (r.length){ r[0].t=r[0].t.replace(/^\s+/,''); r[r.length-1].t=r[r.length-1].t.replace(/\s+$/,''); } return r.filter(x=>x.t); };
+  function tableOf(tb){ return [...tb.rows].map(tr=>[...tr.cells].map(td=>tidy(runsOf(td)))); }
+  function imgOf(cv, cap, jpeg){
+    try { if (!cv.width||!cv.height) return null;
+      let src=cv;
+      if (jpeg){ const c=document.createElement('canvas'); c.width=cv.width; c.height=cv.height; const g=c.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,c.width,c.height); g.drawImage(cv,0,0); src=c; }
+      else { const c=document.createElement('canvas'); c.width=cv.width; c.height=cv.height; const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(cv,0,0); src=c; }
+      const css=cv.getBoundingClientRect(), w=Math.round(css.width||cv.width/2), h=Math.round(css.height||cv.height/2);
+      return {img:src.toDataURL(jpeg?'image/jpeg':'image/png',0.88), w:Math.min(w,620), h:Math.round(Math.min(w,620)*h/Math.max(1,w)), cap};
+    } catch(e){ return null; }
+  }
+  /* 把一个区域拆成段落、表格、图片：遇到块级元素就断段 */
+  function blocks(el, out=[]){
+    let cur=[];
+    const flush=()=>{ const r=tidy(cur); if (r.length) out.push({p:r}); cur=[]; };
+    for (const n of el.childNodes){
+      if (n.nodeType===3){ const t=n.textContent.replace(/\s+/g,' '); if (t.trim()) cur.push({t}); continue; }
+      if (n.nodeType!==1 || SKIP.has(n.tagName) || n.hidden) continue;
+      if (n.tagName==='BR'){ flush(); continue; }
+      if (INLINE.has(n.tagName)){ cur.push(...runsOf(n, n.tagName==='B'||n.tagName==='STRONG'?{b:true}:n.tagName==='SUB'?{sub:true}:n.tagName==='SUP'?{sup:true}:{})); continue; }
+      flush();
+      if (n.tagName==='TABLE') out.push({table:tableOf(n)});
+      else if (n.tagName==='CANVAS'){ const im=imgOf(n,'图：数据处理',false); if (im) out.push(im); }
+      else blocks(n,out);
+    }
+    flush(); return out;
+  }
+  function collect(P){
+    const box=document.getElementById(P+'-rec')?.closest('.labwrap');
+    const title=(box?.querySelector('h2')?.textContent||'').replace(/^实验/,'').trim();
+    const sections=[];
+    const prin=box?.querySelector('details.principle');
+    if (prin) sections.push({h:'一、实验原理', blocks:[...prin.querySelectorAll('p')].map(p=>({p:tidy(runsOf(p))})).filter(b=>b.p.length)});
+    const steps=[...(box?.querySelectorAll('#'+P+'-steps li')||[])].map(li=>({li:tidy(runsOf(li.lastElementChild||li)), done:li.classList.contains('done')}));
+    if (steps.length) sections.push({h:'二、实验步骤与完成情况', blocks:steps});
+    const view=box?.querySelector('.lab-grid canvas.eye');
+    const vi=view?imgOf(view,'导出时的'+(box.querySelector('.lab-grid .caption')?.textContent||'视场'),true):null;
+    const data=blocks(document.getElementById(P+'-table'));
+    sections.push({h:'三、实验数据', blocks:data.length?data:[{p:[{t:'还没有记录数据。'}]}]});
+    const res=blocks(document.getElementById(P+'-result'));
+    sections.push({h:'四、数据处理与结果', blocks:(res.length?res:[{p:[{t:'还没有足够的数据进行计算。'}]}]).concat(vi?[vi]:[])});
+    const rv=[...document.getElementById(P+'-review').querySelectorAll('p')].map(p=>{ const t=p.textContent.trim(), m=t.match(/^【[^】]+】/); return {p:m?[{t:m[0],b:true},{t:t.slice(m[0].length)}]:[{t}]}; }).filter(b=>b.p.some(x=>x.t));
+    sections.push({h:'五、AI 助教评语', blocks:rv.length?rv:[{p:[{t:'尚未进行 AI 批改。'}]}]});
+    const who={}; box?.querySelectorAll('[data-rep]').forEach(i=>{ who[i.dataset.rep]=i.value.trim(); });
+    const d=new Date(), pad=v=>String(v).padStart(2,'0');
+    return {title, version:APP_VERSION, date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`, student:who, sections};
+  }
+  async function exportReport(P, fmt, card){
+    const st=card.querySelector('.rep-status'); st.textContent='正在生成报告…';
+    const rep=collect(P);
+    try { localStorage.setItem('gy-report-who', JSON.stringify(rep.student)); } catch(e){}
+    try {
+      const r=await fetch('api/report',{method:'POST',headers:apiHeaders(),body:JSON.stringify({format:fmt,report:rep})});
+      const j=await r.json().catch(()=>({error:'服务器没有返回结果'}));
+      if (!r.ok||!j.ok) throw Error(j.error||'生成失败');
+      st.textContent='已保存：'+j.path; card.querySelector('[data-open-reports]').hidden=false;
+      logEvent('report_export',{lab:P,format:fmt});
+      if (!window.pywebview){                                          // 浏览器里同时下载一份
+        const bin=atob(j.b64), u8=new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+        const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([u8],{type:fmt==='docx'?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'text/html'})); a.download=j.name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
+      }
+    } catch(e){ st.textContent='导出失败：'+e.message; }
+  }
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('[data-report]'); if (b){ exportReport(b.dataset.lab,b.dataset.report,b.closest('.report-card')); return; }
+    const o=e.target.closest('[data-open-reports]'); if (o) fetch('api/open-reports',{method:'POST',headers:apiHeaders(),body:'{}'});
+  });
+  /* 记住上次填的姓名、学号、班级 */
+  document.addEventListener('focusin',e=>{ const i=e.target.closest?.('[data-rep]'); if (!i||i.dataset.filled) return;
+    try { const w=JSON.parse(localStorage.getItem('gy-report-who')||'{}'); i.closest('.report-card').querySelectorAll('[data-rep]').forEach(x=>{ x.dataset.filled=1; if (!x.value&&w[x.dataset.rep]) x.value=w[x.dataset.rep]; }); } catch(err){} });
+  return {collect};
+})();

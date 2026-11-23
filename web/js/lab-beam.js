@@ -216,7 +216,7 @@ const BM = (() => {
     [c.D,c.L].forEach((h,i)=>{ if (h&&!h.invalid) chart(c.gs.filter(g=>g.lens===!!i&&g.fit),h,$('#'+P+'-ch-'+i)); });
   }
   function chart(gs,h,cv){
-    if (!cv||!cv.clientWidth) return;
+    if (!cv) return; if (!cv.clientWidth) return whenVisible(cv,()=>chart(gs,h,cv));
     const {ctx,dpr,W,H}=setup(cv,170); ctx.setTransform(dpr,0,0,dpr,0,0);
     const zs=gs.map(g=>g.z), zmin=Math.min(...zs,h.z0)-50, zmax=Math.max(...zs)+50, wmax=Math.max(...gs.map(g=>g.fit.w))*1.15;
     const x0=44, x1=W-12, y0=H-26, y1=12, X=z=>x0+(z-zmin)/(zmax-zmin)*(x1-x0), Y=w=>y0-w/wmax*(y0-y1);

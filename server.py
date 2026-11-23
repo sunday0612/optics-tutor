@@ -6,9 +6,11 @@
 2. /api/chat      把提问转发给 DeepSeek（API Key 只保存在本机）
 3. /api/settings  读取 / 保存 API Key 和模型；/api/test 测试连接
 4. /api/log       记录使用数据；/api/stats 汇总；/api/open-data 打开数据文件夹
+5. /api/report    生成实验报告（Word / 网页），/api/open-reports 打开报告文件夹
 
 只用 Python 标准库。开发时也可以单独运行：python server.py，再用浏览器打开显示的地址。
 """
+import base64
 import json
 import os
 import subprocess
@@ -22,8 +24,10 @@ from collections import Counter
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
+import report
+
 APP_NAME = "光影助教"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 
 
 # ---------------- 路径 ----------------
@@ -46,12 +50,21 @@ def user_dir():
     return base
 
 
+def report_dir():
+    """实验报告保存在“文档/光影助教实验报告”，方便学生找到；测试时放在数据目录里。"""
+    if os.environ.get("GY_DATA_DIR"):
+        return os.path.join(os.environ["GY_DATA_DIR"], "reports")
+    docs = os.path.join(os.path.expanduser("~"), "Documents")
+    return os.path.join(docs if os.path.isdir(docs) else os.path.expanduser("~"), "光影助教实验报告")
+
+
 RES_DIR = resource_dir()
 WEB_DIR = os.path.join(RES_DIR, "web")
 DATA_DIR = user_dir()
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 LOG_FILE = os.path.join(DATA_DIR, "usage_log.jsonl")
 MAX_BODY = 500_000
+MAX_REPORT_BODY = 12_000_000          # 实验报告带图片，单独放宽
 SESSION_TOKEN = secrets.token_urlsafe(32)
 DATA_LOCK = threading.RLock()
 LAB_FILE = os.path.join(DATA_DIR, "lab_sessions.json")
@@ -190,6 +203,26 @@ def open_folder(path):
         subprocess.Popen(["xdg-open", path])
 
 
+def save_report(req):
+    """生成实验报告并保存到报告文件夹；同时返回文件内容（base64），浏览器里可以直接下载。"""
+    rep, fmt = req.get("report"), req.get("format")
+    if not isinstance(rep, dict) or fmt not in ("docx", "html"):
+        return {"error": "报告内容或格式不对"}, 400
+    try:
+        data = report.build_docx(rep) if fmt == "docx" else report.build_html(rep).encode("utf-8")
+        folder = report_dir()
+        os.makedirs(folder, exist_ok=True)
+        who = report.safe_name((rep.get("student") or {}).get("name", ""), 12)
+        base = "%s%s_%s" % (report.safe_name(rep.get("title", "")), "_" + who if who != "实验报告" else "", datetime.now().strftime("%Y%m%d-%H%M%S"))
+        path = os.path.join(folder, base + "." + fmt)
+        with open(path, "wb") as f:
+            f.write(data)
+        write_log({"type": "report", "data": {"format": fmt, "title": str(rep.get("title", ""))[:40], "bytes": len(data)}})
+        return {"ok": True, "path": path, "name": os.path.basename(path), "b64": base64.b64encode(data).decode("ascii")}, 200
+    except (OSError, ValueError, TypeError) as e:
+        return {"error": "生成报告失败：" + str(e)}, 500
+
+
 def load_labs():
     with DATA_LOCK:
         try:
@@ -237,7 +270,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def read_json(self):
         length = int(self.headers.get("Content-Length") or 0)
-        if length < 0 or length > MAX_BODY:
+        if length < 0 or length > (MAX_REPORT_BODY if self.path == "/api/report" else MAX_BODY):
             raise ValueError("请求内容太长")
         req = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         if not isinstance(req, dict):
@@ -301,6 +334,15 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "日志 data 必须是对象"}, 400)
             write_log({"type": str(req.get("type", ""))[:40], "data": req.get("data", {})})
             return self.send_json({"ok": True})
+        if self.path == "/api/report":
+            return self.send_json(*save_report(req))
+        if self.path == "/api/open-reports":
+            try:
+                os.makedirs(report_dir(), exist_ok=True)
+                open_folder(report_dir())
+                return self.send_json({"ok": True})
+            except Exception as e:  # noqa: BLE001
+                return self.send_json({"error": str(e)}, 500)
         if self.path == "/api/open-data":
             try:
                 open_folder(DATA_DIR)
