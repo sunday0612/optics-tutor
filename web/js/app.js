@@ -1,7 +1,7 @@
 /* =====================================================================
- * app.js —— 页面路由与启动：#sim 现象仿真；#lab-michelson / #lab-newton / #lab-grating / #lab-fiber / #lab-polar / #lab-laser 虚拟实验
+ * app.js —— 页面路由与启动：#sim 现象仿真；#lab-michelson / #lab-newton / #lab-grating / #lab-fiber / #lab-polar / #lab-laser / #lab-beam / #lab-lens 虚拟实验
  * ===================================================================== */
-const LABS = {michelson:MI, newton:NR, grating:SP, fiber:FB, polar:PL, laser:LD};
+const LABS = {michelson:MI, newton:NR, grating:SP, fiber:FB, polar:PL, laser:LD, beam:BM, lens:LN};
 let curLab = 'michelson';
 
 function route(){

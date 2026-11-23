@@ -1,6 +1,6 @@
 /* =====================================================================
- * models3d.js —— 六个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
- *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）、半导体激光器与光电二极管
+ * models3d.js —— 八个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
+ *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）、半导体激光器与光电二极管、刀口法测光束、光具座测焦距
  * 每个模型返回 update()，在实验状态变化时调用：部件会跟着操作移动或转动。
  * 观察者默认站在 −z 一侧（“前方”）。
  * ===================================================================== */
@@ -536,5 +536,74 @@ const Models3D = (() => {
   }
   laser.camera={target:[-2,6,-4], dist:110, theta:1.25, phi:1.02, minDist:20, maxDist:240};
 
-  return {michelson, newton, spectrometer, fiber, polarization, laser};
+  /* =================================================================
+   * 7. 刀口法测光束：导轨、He-Ne 激光器、透镜（进阶）、刀口平移台、探测器与功率计
+   *   光轴沿 x，导轨 1 mm → 0.055 cm；光束粗细按 w(z) 放大显示；观察者在 +z 一侧
+   * ================================================================= */
+  const glassM=()=>mat({color:'#cfe2fa',spec:1,shin:140,opacity:0.55});
+  const lensGeo=()=>lathe([[0.02,-0.55],[1.2,-0.4],[2.1,-0.12],[2.1,0.12],[1.2,0.4],[0.02,0.55]],40);
+  function beamLab(v, S){
+    const R=v.root, Y=8, X0=-45, K=0.055, X=z=>X0+z*K;
+    table(R, 150, 56);
+    R.add(boxN(112,1.2,4,MAT.castHi,X0+55,0.6,0), shadow(40,10,-60,0), shadow(110,8,X0+55,0));
+    const laser=new Node();
+    laser.add(cylX(2.3,30,mat({color:'#2c3440',spec:0.45,shin:40}),X0-17,Y,0), cylX(2.45,1.2,MAT.chrome,X0-1.6,Y,0), N(disc(0.25,0,20),MAT.led).at(X0-0.95,Y,0).rotate(0,0,-PI/2));
+    for (const x of [X0-26,X0-8]) laser.add(boxN(3,Y-2.6,4,MAT.cast,x,(Y-2.6)/2+0.2,0), boxN(4.4,1.4,5,MAT.castHi,x,Y-2.4,0));
+    R.add(laser);
+    const lens=new Node(); lens.add(alongX(N(lensGeo(),glassM())).at(0,Y,0), N(torus(2.15,0.25,40,8),MAT.anod).at(0,Y,0).rotate(0,0,PI/2), cylY(0.5,Y-3,MAT.steel,0,(Y-3)/2+1.2,0), boxN(3,1,4.6,MAT.cast,0,1.7,0));
+    R.add(lens);
+    /* 刀口平移台：随导轨位置移动；刀片沿 z 方向推进 */
+    const car=new Node(), blade=new Node(), det=new Node();
+    car.add(boxN(4,1,5,MAT.cast,0,1.7,0), cylY(0.5,Y-6,MAT.steel,0,(Y-6)/2+2.2,0), boxN(3.2,1.6,7,MAT.anod,0,Y-3.6,0));
+    const thimble=knob(v,0.8,2.2,MAT.chrome); thimble.rot=[-PI/2,0,0]; thimble.pos=[0,Y-3.6,4.6]; car.add(thimble);
+    blade.add(boxN(0.12,3.2,4,mat({color:'#d8dbe0',spec:1,shin:120}),0,0,-2)); car.add(blade);
+    det.add(cylX(1.6,2.2,MAT.anod,0,Y,0), N(disc(1.1,0,32),mat({color:'#1a1a1f',spec:0.9,shin:90})).at(-1.12,Y,0).rotate(0,0,PI/2), cylY(0.5,Y-2.2,MAT.steel,0.3,(Y-2.2)/2+1.2,0), boxN(3,1,4.6,MAT.cast,0.3,1.7,0));
+    R.add(car, det);
+    const meter=lcdBox(v,16,1).at(30,0,-17); R.add(meter);
+    const segs=[]; for (let i=0;i<48;i++){ const n=beam(mat({color:'#ff2a1a',unlit:true,opacity:0.45,additive:true}),0.2); segs.push(n); R.add(n); }
+    const L=(t,n,o)=>v.label(t,n,o);
+    L('He-Ne 激光器',laser.children[0],[0,3,0]); L('透镜 f = 250 mm',lens.children[0],[0,2.8,0]); L('刀口平移台',car.children[2],[0,-1.5,4]); L('探测器',det.children[0],[0,2.4,0]); L('光功率计',meter.children[0],[0,4.8,0]);
+    const railTag=new Node().at(X0+55,1.4,2.4); R.add(railTag); L('导轨（0～2000 mm）',railTag,[0,0,0]);
+    return function update(){
+      const s=S(), xz=X(s.z);
+      lens.visible=s.lens; lens.pos=[X(s.ZL),0,0];
+      car.pos=[xz,0,0]; det.pos=[xz+2.6,0,0];
+      blade.pos=[0,Y,clamp((s.x-s.xc)*0.9,-6,6)]; thimble.rot=[-PI/2,s.x*2,0];
+      const za0=-0.9/K, zb0=s.z+2.6/K, n=segs.length;               // 从激光器出口到探测器（导轨坐标，mm）
+      for (let i=0;i<n;i++){ const za=za0+(zb0-za0)*i/n, zb=za0+(zb0-za0)*(i+1)/n, zm=(za+zb)/2, sg=segs[i];
+        sg.r=Math.max(0.05,s.wf(Math.max(0,zm))*0.55); setBeam(sg,[X(za),Y,0],[X(zb),Y,0]);
+        sg.mat.opacity=zm>s.z?0.45*Math.min(1,s.P/s.PL):0.45; }
+      lcdText(meter.lcd[0], s.P.toFixed(4), 'mW');
+    };
+  }
+  beamLab.camera={target:[8,6,-3], dist:150, theta:1.3, phi:1.0, minDist:20, maxDist:300};
+
+  /* =================================================================
+   * 8. 光具座测焦距：导轨、光源与物、透镜、像屏、平面镜（自准法）
+   *   导轨 1 mm → 0.07 cm；观察者在 +z 一侧
+   * ================================================================= */
+  function lensLab(v, S){
+    const R=v.root, Y=9, X0=-52, K=0.07, X=x=>X0+x*K;
+    table(R, 130, 50);
+    R.add(boxN(108,1.4,5,MAT.castHi,X0+52.5,0.7,0), shadow(108,9,X0+52.5,0));
+    const slider=(x)=>{ const n=new Node(); n.add(boxN(4,1.2,6,MAT.cast,0,1.9,0), cylY(0.55,Y-5,MAT.steel,0,(Y-5)/2+2.5,0)); n.pos=[x,0,0]; return n; };
+    const src=slider(X(100)); src.add(boxN(5,5,5,mat({color:'#3a3f46',spec:0.3}),-3.5,Y,0), N(plane(3.4,3.4),mat({color:'#fff6d6',unlit:true})).at(-0.98,Y,0).rotate(0,0,PI/2),
+      boxN(0.3,4,4,MAT.anod,-0.8,Y,0));
+    R.add(src);
+    const ls=slider(0), lensN=alongX(N(lensGeo(),glassM())); ls.add(lensN, N(torus(2.15,0.25,40,8),MAT.anod).at(0,Y,0).rotate(0,0,PI/2));
+    const mirror=new Node(); mirror.add(boxN(0.4,4.6,4.6,mat({color:'#dfe3ea',spec:1,shin:160}),1.4,Y,0)); ls.add(mirror); R.add(ls);
+    const scr=slider(0); scr.add(boxN(0.25,7,7,mat({color:'#ece9e2',spec:0.1}),0,Y,0)); const spot=N(disc(1,0,32),glow('#ffd88a',0.8)).rotate(0,0,PI/2); scr.add(spot); R.add(scr);
+    const b1=beam(mat({color:'#ffe2a0',unlit:true,opacity:0.18,additive:true}),0.9), b2=beam(mat({color:'#ffe2a0',unlit:true,opacity:0.18,additive:true}),0.9); R.add(b1,b2);
+    const L=(t,n,o)=>v.label(t,n,o);
+    L('光源与物',src.children[2],[0,4,0]); L('凸透镜',lensN,[0,3,0]); L('像屏',scr.children[2],[0,4.6,0]); L('平面镜',mirror.children[0],[0,-3.4,0]);
+    return function update(){
+      const s=S(), xl=X(s.xl), auto=s.mode==='auto';
+      ls.pos=[xl,0,0]; lensN.pos=[0,Y+s.ey*0.35,s.ex*0.35]; lensN.rot=[0,0,-PI/2]; mirror.visible=auto;
+      scr.visible=!auto; scr.pos=[X(s.xs),0,0]; spot.pos=[-0.14,Y,0];
+      setBeam(b1,[X(s.XO)-0.8,Y,0],[xl,Y,0]); b2.visible=!auto; if (!auto) setBeam(b2,[xl,Y,0],[X(s.xs)-0.2,Y,0]);
+    };
+  }
+  lensLab.camera={target:[0,7,-2], dist:130, theta:1.3, phi:1.0, minDist:20, maxDist:280};
+
+  return {michelson, newton, spectrometer, fiber, polarization, laser, beam:beamLab, lens:lensLab};
 })();

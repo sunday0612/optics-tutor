@@ -18,12 +18,14 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD']]){
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD'],['beam','BM'],['lens','LN']]){
   const internals={
    PL:'validExtinction,checkPlate,intensity',
    NR:'review,setRetake(levels){retake=levels},wedgeCalc,nx:()=>NX',
    MI:'naCalc,setNa(r){X.na=r},PERIOD',
    SP:'misread',
+   BM:'erfFit,hyper,beam,wAt',
+   LN:'sharpPos',
   };
   const exports=`return {s,init,calc${internals[n]?','+internals[n]:''}};`;
   vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};',exports),labs);
@@ -236,5 +238,17 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  // 分光计：读游标的核对
  const mr=vm.runInContext(`[SP.misread({L:164+31/60,R:344+29/60,Lt:164+31/60,Rt:344+29/60}), SP.misread({L:165+1/60,R:344+29/60,Lt:164+31/60,Rt:344+29/60}), SP.misread({L:164+33/60,R:344+29/60,Lt:164+31/60,Rt:344+29/60})]`,labs);
  assert(!mr[0].bad && mr[1].bad && mr[1].text.includes('30′') && mr[2].bad && mr[2].text==='差了 2′');
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading).');
+ // ---------- v1.6.0：刀口法测光束、光具座测焦距 ----------
+ const ef=vm.runInContext(`(()=>{ const w=0.5, xc=4, pts=[]; for (let k=0;k<30;k++){ const x=3+k*0.07; pts.push({x,P:1.2*0.5*(1-(()=>{const u=Math.SQRT2*(x-xc)/w; const t=1/(1+0.3275911*Math.abs(u)), y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-u*u); return u>=0?y:-y;})())}); } return BM.erfFit(pts); })()`,labs);
+ assert(Math.abs(ef.w-0.5)<1e-4 && Math.abs(ef.xc-4)<1e-4 && Math.abs(ef.w1090-0.5)<0.01, 'erf fit '+ef.w);
+ vm.runInContext(`Object.assign(BM.s,{W0:0.36,z0:-250,M2:1.2})`,labs);
+ const hb=vm.runInContext(`BM.hyper([300,500,700,1000,1400].map(z=>({lens:false,z,fit:{w:BM.wAt(z,false)}})),false)`,labs);
+ assert(Math.abs(hb.W0-0.36)<1e-6 && Math.abs(hb.z0+250)<1e-3 && Math.abs(hb.M2-1.2)<1e-6);
+ const bl=vm.runInContext('BM.beam(true)',labs);
+ assert(bl.z0>300 && bl.W0<0.36);                                              // 透镜后束腰在导轨上、比原来小
+ vm.runInContext(`Object.assign(LN.s,{f:180,dl:2,rev:false}); { const sp=LN.sharpPos(1100); LN.s.rows=[{t:'b',xs:1100,x:sp[0],big:true,off:0},{t:'b',xs:1100,x:sp[1],big:false,off:0},
+   {t:'a',x:100+180-2,rev:false,off:0},{t:'a',x:100+180+2,rev:true,off:0}]; }`,labs);
+ const lc=vm.runInContext('LN.calc()',labs);
+ assert(Math.abs(lc.bessel.mean-180)<1e-9 && Math.abs(lc.auto.f1-178)<1e-9 && Math.abs(lc.auto.mean-180)<1e-9 && Math.abs(lc.auto.delta-2)<1e-9);
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M², lens focal length).');
 })().catch(e=>{console.error(e);process.exitCode=1});
