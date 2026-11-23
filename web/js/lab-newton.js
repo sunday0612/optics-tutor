@@ -323,7 +323,7 @@ const NR = (() => {
     h+= c.L!=null ? `<div>棱边到细丝 L = ${c.L.toFixed(3)} mm</div>` : '<div class="hint">还需要分别记录棱边和细丝的位置。</div>';
     if (c.d){ const f=Unc.format(c.d,c.ud,'mm');
       h+=`<div>细丝直径 d = Lλ/(2b) = <span class="big">${(c.d*1000).toFixed(1)} µm</span></div>
-        <div class="unc">不确定度：u(b) = ${(+c.sum.u.toPrecision(2))} mm（A 类与读数 B 类合成），u(L) = ${(+c.uL.toPrecision(2))} mm，u(d)/d = √[(u(L)/L)² + (u(b)/b)²]<div>结果：<b>d = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(1)}%</div></div>
+        <div class="unc">不确定度：u(b) = ${(+c.sum.u.toPrecision(2))} mm（A 类与读数 B 类合成），u(L) = ${(+c.uL.toPrecision(2))} mm，u(d)/d = √[(u(L)/L)² + (u(b)/b)²]<div class="final">结果：<b>d = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(1)}%</div></div>
         ${s.checked?`<div>细丝真实直径 ${(W().dw*1000).toFixed(1)} µm，相对误差 <b>${c.err>=0?'+':''}${c.err.toFixed(1)}%</b></div>`:'<div class="hint">真实直径在 AI 批改后显示。</div>'}`; }
     return h+'</div>';
   }

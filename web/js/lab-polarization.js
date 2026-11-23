@@ -323,7 +323,7 @@ const PL = (() => {
       out+=`<div class="result">最小二乘拟合 I = I<sub>min</sub> + (I<sub>max</sub> − I<sub>min</sub>)·cos²(θ − θ<sub>∥</sub>)：
         <div>I<sub>max</sub> = ${c.m.Imax.toFixed(1)} µW，I<sub>min</sub> = ${c.m.Imin.toFixed(2)} µW，消光比 ${(c.m.ratio*100).toFixed(2)}%，R² = ${c.m.r2.toFixed(5)}</div>
         <div>检偏器与起偏器平行时的读数 θ<sub>∥</sub> = <span class="big">${c.m.par.toFixed(2)}°</span></div>
-        <div class="unc">不确定度：u<sub>A</sub> = ${(+c.m.uA.toPrecision(2))}°（拟合协方差），u<sub>B</sub> = ${(+c.m.uB.toPrecision(2))}°（游标 ${INST}°），u = ${(+c.m.u.toPrecision(2))}°<div>结果：<b>θ<sub>∥</sub> = ${f.text.replace(') °',')°')}</b></div></div>
+        <div class="unc">不确定度：u<sub>A</sub> = ${(+c.m.uA.toPrecision(2))}°（拟合协方差），u<sub>B</sub> = ${(+c.m.uB.toPrecision(2))}°（游标 ${INST}°），u = ${(+c.m.u.toPrecision(2))}°<div class="final">结果：<b>θ<sub>∥</sub> = ${f.text.replace(') °',')°')}</b></div></div>
         ${s.checked?`<div>转盘真实偏差：θ<sub>∥</sub> 应为 ${s.t0.toFixed(2)}°（或加 180°），相差 <b>${c.m.err>=0?'+':''}${c.m.err.toFixed(2)}°</b></div>`:''}
         <canvas id="${P}-chart" class="chart"></canvas></div>`;
     } else if (m.length) out+=`<div class="hint" style="margin-top:8px">至少需要 8 个点，并且角度要分布在半圈以上（相邻两点间隔不超过 45°）才能拟合。</div>`;

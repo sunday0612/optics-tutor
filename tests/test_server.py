@@ -87,6 +87,12 @@ class API(unittest.TestCase):
   self.assertEqual(self.req('/api/labs',{'lab':'bm','state':rows(1500)})[0],200)
   self.assertEqual(self.req('/api/labs',{'lab':'bm','state':rows(1501)})[0],400)
   self.assertEqual(self.req('/api/labs',{'lab':'mi','state':rows(501)})[0],400)
+ def test_real_data_lab(self):
+  state={'g':'he','prm':{'he':{'inst':'0.0001'}},'rows':[{'g':'he','v':['0','32.1']}],'checked':False,'review':''}
+  self.assertEqual(self.req('/api/labs',{'lab':'umi','state':state})[0],200)
+  self.assertEqual(self.req('/api/labs')[1]['umi'],state)
+  import report
+  self.assertIn('实测',report.footer({'source':'real','version':'x'})); self.assertIn('虚拟实验',report.footer({'version':'x'}))
  def test_stats_corrupt_line(self):
   Path(server.LOG_FILE).write_text('bad json\n{"type":"quiz","data":[],"time":"today"}\n',encoding='utf-8')
   self.assertEqual(self.req('/api/stats')[0],200)

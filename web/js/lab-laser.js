@@ -213,13 +213,13 @@ const LD = (() => {
       out+=`<div class="result">线性段拟合 P = η<sub>s</sub>(I − I<sub>th</sub>)：<table class="data"><tr><th>T/°C</th><th>I<sub>th</sub>/mA</th><th>η<sub>s</sub>/(W/A)</th></tr>${fits.map(g=>{ const a=g.fit.uith!=null?Unc.format(g.fit.ith,g.fit.uith,''):null, b=g.fit.ueta!=null?Unc.format(g.fit.eta,g.fit.ueta,''):null;
         return `<tr><td>${g.Ts}</td><td>${a?a.text:g.fit.ith.toFixed(2)}</td><td>${b?b.text:g.fit.eta.toFixed(3)}</td></tr>`; }).join('')}</table>
         ${c.T0?`<div>ln I<sub>th</sub> 对 T 拟合（${c.T0.n} 个温度）：特征温度 T₀ = <span class="big">${c.T0.T0.toFixed(1)} K</span></div>
-          <div class="unc">${c.T0.u!=null?`不确定度：取拟合斜率的标准偏差传递，u(T₀) = T₀²·u(k) = ${(+c.T0.u.toPrecision(2))} K<div>结果：<b>T₀ = ${Unc.format(c.T0.T0,c.T0.u,'K').text}</b></div>`:'只有 2 个温度，无法估计 T₀ 的不确定度，建议至少测 3 个温度。'}</div>
+          <div class="unc">${c.T0.u!=null?`不确定度：取拟合斜率的标准偏差传递，u(T₀) = T₀²·u(k) = ${(+c.T0.u.toPrecision(2))} K<div class="final">结果：<b>T₀ = ${Unc.format(c.T0.T0,c.T0.u,'K').text}</b></div>`:'只有 2 个温度，无法估计 T₀ 的不确定度，建议至少测 3 个温度。'}</div>
           ${s.checked?`<div>本台激光器的真实 T₀ = ${s.T0.toFixed(1)} K，25 °C 阈值 ${s.ith25.toFixed(2)} mA，斜率效率 ${s.eta25.toFixed(3)} W/A；T₀ 相对偏差 <b>${c.T0.err>=0?'+':''}${c.T0.err.toFixed(1)}%</b></div>`:'<div class="hint">真实参数在 AI 批改后显示。</div>'}`:'<div class="hint">至少要 2 个温度的阈值才能求 T₀。</div>'}
         <canvas id="${P}-chart" class="chart"></canvas></div>`;
     } else if (c.groups.length) out+=`<div class="hint" style="margin-top:8px">每个温度的线性段（P ≥ ${PLIN} mW）至少要 4 个点才能拟合。</div>`;
     if (c.pd&&c.pd.R!=null){ const f=Unc.format(c.pd.R,c.pd.u,'A/W');
       out+=`<div class="result">I<sub>ph</sub> 对 P 直线拟合（${c.pd.n} 对）：响应度 R = <span class="big">${c.pd.R.toFixed(4)} A/W</span>，截距 ${c.pd.int.toFixed(3)} µA${c.pd.dark!=null?`（实测暗电流 ${c.pd.dark.toFixed(3)} µA）`:''}
-        <div class="unc">不确定度：u<sub>A</sub> = ${c.pd.uA!=null?(+c.pd.uA.toPrecision(2)):'—'} A/W（拟合），u<sub>B</sub> = ${(+c.pd.uB.toPrecision(2))} A/W（功率计校准 ${PM_ACC*100}%），u = ${(+c.pd.u.toPrecision(2))} A/W<div>结果：<b>R = ${f.text}</b>，量子效率 η = R × 1239.84 / 650 = ${(c.pd.qe*100).toFixed(1)}% ± ${(c.pd.uqe*100).toFixed(1)}%</div></div>
+        <div class="unc">不确定度：u<sub>A</sub> = ${c.pd.uA!=null?(+c.pd.uA.toPrecision(2)):'—'} A/W（拟合），u<sub>B</sub> = ${(+c.pd.uB.toPrecision(2))} A/W（功率计校准 ${PM_ACC*100}%），u = ${(+c.pd.u.toPrecision(2))} A/W<div class="final">结果：<b>R = ${f.text}</b>，量子效率 η = R × 1239.84 / 650 = ${(c.pd.qe*100).toFixed(1)}% ± ${(c.pd.uqe*100).toFixed(1)}%</div></div>
         ${s.checked?`<div>光电二极管真实量子效率 ${(s.qe*100).toFixed(1)}%（25 °C 时 R = ${c.pd.Rtrue.toFixed(4)} A/W），暗电流 ${s.dark.toFixed(3)} µA；R 相对偏差 <b>${c.pd.err>=0?'+':''}${c.pd.err.toFixed(1)}%</b></div>`:''}
         <canvas id="${P}-chart2" class="chart"></canvas></div>`; }
     $('#'+P+'-result').innerHTML=out;

@@ -256,5 +256,24 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    {t:'a',x:100+180-2,rev:false,off:0},{t:'a',x:100+180+2,rev:true,off:0}]; }`,labs);
  const lc=vm.runInContext('LN.calc()',labs);
  assert(Math.abs(lc.bessel.mean-180)<1e-9 && Math.abs(lc.auto.f1-178)<1e-9 && Math.abs(lc.auto.mean-180)<1e-9 && Math.abs(lc.auto.delta-2)<1e-9);
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length).');
+ // ---------- v1.8.0：处理我的数据 ----------
+ Object.assign(labs,{esc:s=>String(s),dms:d=>{d=((d%360)+360)%360;let a=Math.floor(d),m=Math.round((d-a)*60);if(m===60){a=(a+1)%360;m=0;}return `${a}°${String(m).padStart(2,'0')}′`;}});
+ vm.runInContext(fs.readFileSync('web/js/mydata.js','utf8'),labs);
+ const MD=vm.runInContext('MyData',labs);
+ assert.equal(MD.num(' 3.5 '),3.5); assert.equal(MD.num(''),null); assert(Number.isNaN(MD.num('3.5a'))); assert.equal(MD.num('－２'),-2);
+ assert(Math.abs(MD.ang('164°31′')-(164+31/60))<1e-12 && Math.abs(MD.ang('164 31')-(164+31/60))<1e-12 && MD.ang('164.5')===164.5 && Number.isNaN(MD.ang('164°61′')));
+ const fullExample=key=>{ const spec=MD.SPECS[key], s=MD.blank(spec); spec.groups.forEach(g=>{ g.example().forEach(v=>s.rows.push({g:g.id,v:v.map(String)})); if (g.exParams) s.prm[g.id]={...g.exParams}; }); return MD.compute(spec,s); };
+ const expect={michelson:/λ = \(63[23]\.\d ± /, newton:/R = \(1\.0[456]\d ± /, grating:/d = \(166[67]\.\d ± /, fiber:/θ = \(77\.\d ± /, polar:/θ<sub>∥<\/sub> = \(23\.\d+ ± /, laser:/R = \(0\.42\d ± /, beam:/M² = \(1\.1[0-9]\d ± /, lens:/f = \(16[45]\.\d+ ± /};
+ for (const key of MD.KEYS){ const res=fullExample(key);
+   assert(res.ok && res.entered && res.prmOk, key+' example should compute');
+   assert.deepEqual(res.issues,[], key+' example has issues: '+res.issues.join('；'));
+   assert(expect[key].test(res.result.replace(/<b>|<\/b>/g,'')), key+' result text: '+res.result.slice(0,300)); }
+ // 有问题的数据要被指出：反转鼓轮、数错环、格式错误
+ { const spec=MD.SPECS.michelson, s=MD.blank(spec);
+   [['0','32.41250'],['50','32.42832'],['100','32.44x14'],['150','32.45990'],['200','32.47580'],['250','32.49160'],['300','32.50742'],['350','32.52480'],['400','32.53900'],['450','32.53890']].forEach(v=>s.rows.push({g:'he',v}));
+   const res=MD.compute(spec,s), all=res.issues.join('\n');
+   assert(/第 3 行有空白或不合法/.test(all) && /反转过鼓轮/.test(all) && /可能数错了环/.test(all), all); }
+ // 位置太集中的光束数据不能给出可信的 M²
+ { const h=MD.hyperFit([115,120,125,130,135],[0.4321,0.4330,0.4336,0.4347,0.4352],632.8e-6); assert(h.invalid || !h.reliable); }
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all eight experiments).');
 })().catch(e=>{console.error(e);process.exitCode=1});

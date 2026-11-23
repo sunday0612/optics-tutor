@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.7.2';
+const APP_VERSION = '1.8.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -154,7 +154,7 @@ function aiErrorNote(e){
 
 /* ---------------- 虚拟实验通用部件 ---------------- */
 /* 实验页面骨架：左边是步骤 / 数据 / 批改，右边是仪器 */
-function labShell(p, {title, principle, right}){
+function labShell(p, {title, principle, right, rightClass='card scope', recBar=true}){
   return `<section>
     <div class="card">
       <h2 class="lab-title" data-title="${title}"><span class="n">实验</span>${title}<span class="prog" id="${p}-prog"></span></h2>
@@ -163,7 +163,7 @@ function labShell(p, {title, principle, right}){
     </div>
     <div class="card data-card">
       <h2><span class="n">记录</span>数据记录</h2>
-      <div class="row rec-bar" style="margin-top:0;flex-wrap:wrap">
+      <div class="row rec-bar" style="margin-top:0;flex-wrap:wrap"${recBar?'':' hidden'}>
         <button class="primary" id="${p}-rec">记录读数</button>
         <button class="ghost" id="${p}-undo">撤销</button>
         <button class="ghost" id="${p}-clr">清空</button>
@@ -186,7 +186,7 @@ function labShell(p, {title, principle, right}){
       <div class="hint rep-status" role="status"></div>
     </div>
   </section>
-  <section><div class="card scope">${right}</div></section>`;
+  <section><div class="${rightClass}">${right}</div></section>`;
 }
 /* 图表画布所在的实验还没打开时宽度为 0，等它显示出来再画（否则恢复存档后图是空的） */
 function whenVisible(cv, draw){
@@ -367,7 +367,7 @@ const Report = (() => {
     flush(); return out;
   }
   function collect(P){
-    const box=document.getElementById(P+'-rec')?.closest('.labwrap');
+    const box=document.getElementById(P+'-steps')?.closest('.labwrap');
     const title=box?.querySelector('h2[data-title]')?.dataset.title||'';
     const sections=[];
     const prin=box?.querySelector('details.principle');
@@ -384,7 +384,7 @@ const Report = (() => {
     sections.push({h:'五、AI 助教评语', blocks:rv.length?rv:[{p:[{t:'尚未进行 AI 批改。'}]}]});
     const who={}; box?.querySelectorAll('[data-rep]').forEach(i=>{ who[i.dataset.rep]=i.value.trim(); });
     const d=new Date(), pad=v=>String(v).padStart(2,'0');
-    return {title, version:APP_VERSION, date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`, student:who, sections};
+    return {title, source:box?.dataset.source||'virtual', version:APP_VERSION, date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`, student:who, sections};
   }
   async function exportReport(P, fmt, card){
     const st=card.querySelector('.rep-status'), btns=card.querySelectorAll('[data-report]');

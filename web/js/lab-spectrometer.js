@@ -308,7 +308,7 @@ const SP = (() => {
       : '<div class="hint">待测谱线的标准值在 AI 批改后显示。</div>';
     return `<div class="result">待测谱线（${targetName()}）：φ = ${dms(u.phi)}，λ = d̄·sinφ = <span class="big">${u.lam.toFixed(1)} nm</span>
       <div class="unc">不确定度：来自光栅常数 u<sub>d</sub>·sinφ = ${p(u.fromD)} nm，来自本次角度测量 d̄·cosφ·u<sub>φ</sub> = ${p(u.fromPhi)} nm，合成 u = ${p(u.u)} nm
-      <div>结果：<b>λ = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(2)}%</div></div>${reveal}</div>`;
+      <div class="final">结果：<b>λ = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(2)}%</div></div>${reveal}</div>`;
   }
 
   /* ---------- AI 批改 ---------- */

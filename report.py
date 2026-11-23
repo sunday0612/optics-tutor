@@ -129,6 +129,11 @@ def _meta(rep):
     return (who + "　" if who else "") + "日期：" + str(rep.get("date", ""))
 
 
+def footer(rep):
+    src = {"real": "数据为学生在实验中实测并录入", "example": "含程序生成的示例数据，不是实测数据"}.get(rep.get("source"), "数据来自虚拟实验")
+    return "由光影助教 v%s 生成。%s，AI 评语仅供参考。" % (rep.get("version", ""), src)
+
+
 def build_docx(rep):
     body, media, rels = [], [], []
     body.append(_w_par([{"t": "实验报告：" + str(rep.get("title", ""))}], style="Title"))
@@ -152,7 +157,7 @@ def build_docx(rep):
                     media.append(("word/media/image%d.%s" % (n, img["ext"]), img["data"]))
                     rels.append('<Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image%d.%s"/>' % (rid, n, img["ext"]))
                     body.append(_w_image(img, rid, n))
-    body.append(_w_par([{"t": "由光影助教 v%s 生成。数据来自虚拟实验，AI 评语仅供参考。" % rep.get("version", "")}], style="Caption", align="center"))
+    body.append(_w_par([{"t": footer(rep)}], style="Caption", align="center"))
     doc = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
@@ -249,8 +254,8 @@ button{font:inherit;padding:6px 16px;border:1px solid #888;border-radius:6px;bac
 </style></head><body>
 <div class="bar"><button onclick="window.print()">打印 / 另存为 PDF</button></div>
 <h1>%s</h1><div class="meta">%s</div>%s
-<div class="foot">由光影助教 v%s 生成。数据来自虚拟实验，AI 评语仅供参考。</div>
-</body></html>""" % (title, title, html.escape(_meta(rep)), "".join(out), html.escape(str(rep.get("version", ""))))
+<div class="foot">%s</div>
+</body></html>""" % (title, title, html.escape(_meta(rep)), "".join(out), html.escape(footer(rep)))
 
 
 def safe_name(s, limit=40):

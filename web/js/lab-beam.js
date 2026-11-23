@@ -271,5 +271,6 @@ ${[['直接测量',c.D],['透镜后',c.L]].map(([n,h])=>h&&!h.invalid?`${n}二�
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  (globalThis.LabMath||(globalThis.LabMath={})).beam={erfFit};   // “处理我的数据”复用刀口拟合
   return {mount, render, key};
 })();

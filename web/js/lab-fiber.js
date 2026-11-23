@@ -317,7 +317,7 @@ const FB = (() => {
       const f=Unc.format(c.fit.c,c.fit.uc||0,'mm⁻¹');
       out+=`<div class="result">拟合 ln(L/√R) = ln A − cR（${c.fit.n} 个半径）：
         <div>c = <span class="big">${c.fit.c.toFixed(3)} mm⁻¹</span>　每圈损耗降到 0.1 dB 的半径约 ${c.fit.Rcrit.toFixed(2)} mm</div>
-        <div class="unc">${c.fit.uc!=null?`不确定度：取拟合斜率的标准偏差 u<sub>A</sub> = ${(+c.fit.uc.toPrecision(3))} mm⁻¹<div>结果：<b>c = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(2)}%</div>`:'只有 3 个以内的点时无法估计斜率的标准偏差，建议多测几个半径。'}</div>
+        <div class="unc">${c.fit.uc!=null?`不确定度：取拟合斜率的标准偏差 u<sub>A</sub> = ${(+c.fit.uc.toPrecision(3))} mm⁻¹<div class="final">结果：<b>c = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(2)}%</div>`:'只有 3 个以内的点时无法估计斜率的标准偏差，建议多测几个半径。'}</div>
         ${s.checked?`<div>Marcuse 公式理论值 c = ${C_TH.toFixed(3)} mm⁻¹，相对偏差 <b>${c.fit.err>=0?'+':''}${c.fit.err.toFixed(1)}%</b></div>`:'<div class="hint">理论值在 AI 批改后显示。</div>'}
         <canvas id="${P}-chart" class="chart"></canvas></div>`;
     } else if (c.items.length) out+='<div class="hint" style="margin-top:8px">至少需要 3 个不同半径的有效数据才能拟合。</div>';
@@ -325,7 +325,7 @@ const FB = (() => {
       const f=c.far, ok=f.mfd>0, fm=ok?Unc.format(f.mfd,f.umfd,'µm'):null;
       out+=`<div class="result">远场：r 对 L 拟合斜率 θ = ${(f.th*1000).toFixed(1)} mrad${f.delta!=null?`，白屏零点到端面约 ${f.delta.toFixed(1)} mm`:''}
         ${ok?`<div>模场直径 MFD = 2λ/(πθ) = <span class="big">${f.mfd.toFixed(2)} µm</span></div>
-        <div class="unc">不确定度：u<sub>A</sub>(θ) = ${f.uA!=null?(+(f.uA*1000).toPrecision(3))+' mrad':'—（只有两个点）'}，u<sub>B</sub>(θ) = ${(+(f.uB*1000).toPrecision(3))} mrad，合成 u(θ) = ${(+(f.u*1000).toPrecision(3))} mrad<div>结果：<b>MFD = ${fm.text}</b>，相对不确定度 ${fm.rel.toFixed(1)}%</div></div>
+        <div class="unc">不确定度：u<sub>A</sub>(θ) = ${f.uA!=null?(+(f.uA*1000).toPrecision(3))+' mrad':'—（只有两个点）'}，u<sub>B</sub>(θ) = ${(+(f.uB*1000).toPrecision(3))} mrad，合成 u(θ) = ${(+(f.u*1000).toPrecision(3))} mrad<div class="final">结果：<b>MFD = ${fm.text}</b>，相对不确定度 ${fm.rel.toFixed(1)}%</div></div>
         ${s.checked?`<div>理论值 MFD = ${(2*WF).toFixed(2)} µm，相对偏差 <b>${f.err>=0?'+':''}${f.err.toFixed(1)}%</b></div>`:''}`:'<div class="note">斜率不为正，检查各位置的光斑半径读数。</div>'}</div>`;
     }
     $('#'+P+'-result').innerHTML=out;
