@@ -21,7 +21,9 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD']]){
   const internals={
    PL:'validExtinction,checkPlate,intensity',
-   NR:'review,setRetake(levels){retake=levels}',
+   NR:'review,setRetake(levels){retake=levels},wedgeCalc,nx:()=>NX',
+   MI:'naCalc,setNa(r){X.na=r},PERIOD',
+   SP:'misread',
   };
   const exports=`return {s,init,calc${internals[n]?','+internals[n]:''}};`;
   vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};',exports),labs);
@@ -212,5 +214,27 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert(Math.abs(ld.pd.dark-0.15)<1e-12 && ld.pd.n===4);
  assert(Math.abs(ld.pd.R-0.42)<1e-12 && Math.abs(ld.pd.pairs[0].R-0.42)<1e-12 && ld.pd.pairs[0].raw>0.42);
  assert(Math.abs(ld.pd.u-0.42*0.03/Math.sqrt(3))<1e-9);
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode).');
+ // ---------- v1.5.0：钠光双线、牛顿环灰尘与劈尖、分光计游标 ----------
+ const per=vm.runInContext('MI.PERIOD',labs);
+ assert(Math.abs(per-0.29077)<2e-4, 'Na period '+per);                       // λ̄²/(2Δλ) ≈ 0.291 mm
+ vm.runInContext(`MI.setNa(Array.from({length:8},(_,i)=>({R:32+(i+0.5)*MI.PERIOD,k:i})))`,labs);
+ const na=vm.runInContext('MI.naCalc()',labs);
+ assert(Math.abs(na.mean-589.3**2/(2*per*1e6))<1e-9 && !na.skipped && Math.abs(na.mean-0.597)<0.002);
+ vm.runInContext(`MI.setNa([0,1,3,4].map(i=>({R:32+i*MI.PERIOD,k:i})))`,labs);           // 漏记一次最低
+ assert(vm.runInContext('MI.naCalc().skipped',labs));
+ // 牛顿环：附加厚度 f 让单环结果偏小，逐差法不变
+ vm.runInContext(`{const R=1000, L=589.3e-6, f=0.6; NR.nx().f=f; const rows=[];
+   for (const k of [30,29,28,27,26,25,24,23,22,21]){ const h=Math.sqrt((k-f)*R*L); rows.push({side:'L',k,x:+(25-h).toFixed(3)},{side:'R',k,x:+(25+h).toFixed(3)}); }
+   NR.s.rows=rows; NR.s.Rtrue=R;}`,labs);
+ const nrd=vm.runInContext('NR.calc()',labs);
+ assert(Math.abs(nrd.mean-1)<0.003 && nrd.single.mean<nrd.mean*0.985, 'dust bias '+nrd.single.mean);
+ // 劈尖：d = Lλ/(2b)
+ vm.runInContext(`{const w={xe:5,L:35,dw:0.08,rows:[],sel:'f',rev:0,pos:{X:6,A:6,dead:0,lastDir:0}}, b=589.3e-6*35/(2*0.08);
+   for (let j=0;j<8;j++) w.rows.push({t:'f',N:20+10*j,x:5+(20+10*j)*b,off:0}); w.rows.push({t:'e',x:5,off:0},{t:'w',x:40,off:0}); NR.nx().w=w;}`,labs);
+ const wc=vm.runInContext('NR.wedgeCalc()',labs);
+ assert(Math.abs(wc.d-0.08)<1e-9 && Math.abs(wc.L-35)<1e-9);
+ // 分光计：读游标的核对
+ const mr=vm.runInContext(`[SP.misread({L:164+31/60,R:344+29/60,Lt:164+31/60,Rt:344+29/60}), SP.misread({L:165+1/60,R:344+29/60,Lt:164+31/60,Rt:344+29/60}), SP.misread({L:164+33/60,R:344+29/60,Lt:164+31/60,Rt:344+29/60})]`,labs);
+ assert(!mr[0].bad && mr[1].bad && mr[1].text.includes('30′') && mr[2].bad && mr[2].text==='差了 2′');
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading).');
 })().catch(e=>{console.error(e);process.exitCode=1});

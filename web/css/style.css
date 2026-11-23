@@ -221,6 +221,9 @@ table.data tr.warn td{color:var(--bad)}
 .askcount input{width:96px;margin-left:8px;font:inherit;font-size:14px;border:1px solid var(--hair);border-radius:5px;padding:4px 8px;background:#fff}
 table.data tr.bad td{color:var(--bad)}
 .fbtable th{white-space:nowrap}
+.vern{display:block;width:100%;height:66px;margin-top:6px;border:1px solid var(--anod-hair);border-radius:4px}
+.seg .tab.ok::after{content:' ✓';color:var(--good,#2f855a)}
+.seg .tab:disabled{opacity:.45;cursor:not-allowed}
 .fbtable table.plt{display:block;overflow-x:auto;font-size:12.5px}
 .fbtable td:last-child{font-size:12.5px;text-align:left}
 .result canvas.chart{display:block;width:100%;margin-top:10px}

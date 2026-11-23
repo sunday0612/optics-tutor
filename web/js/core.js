@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.5.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
