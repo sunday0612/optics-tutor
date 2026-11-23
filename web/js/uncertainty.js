@@ -44,7 +44,7 @@ const Unc = (() => {
     const f = format(sum.mean, sum.u, unit);
     const a = sum.uA == null ? '无法计算（只有 1 组）' : `${p(sum.uA)} ${unit}`;
     return `<div class="unc">不确定度：u<sub>A</sub> = ${a}，u<sub>B</sub> = ${p(sum.uB)} ${unit}，u = √(u<sub>A</sub>² + u<sub>B</sub>²) = ${p(sum.u)} ${unit}
-      <div>结果：<b>${sym} = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(2)}%</div></div>`;
+      <div class="final">结果：<b>${sym} = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(2)}%</div></div>`;
   }
   /* 给 AI 的一行文字 */
   function line(sum, sym, unit){

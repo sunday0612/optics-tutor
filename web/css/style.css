@@ -96,6 +96,11 @@ section::-webkit-scrollbar-track,.card.scope::-webkit-scrollbar-track{background
 section:first-child>.card+.card{border-top:1px solid var(--hair-2)}
 .card h2{font-family:var(--serif);font-weight:600;font-size:17px;letter-spacing:1px;margin:0 0 12px;line-height:1.4}
 .card h2 .n{display:none}
+/* 记录按钮在数据卡片内滚动时吸附在顶部，随时能点 */
+.rec-bar{position:sticky;top:0;z-index:3;background:var(--paper);padding:10px 0 8px;margin-top:-10px!important;box-shadow:0 1px 0 var(--hair-2)}
+/* 最后两张卡片（AI 批改、导出报告）退后一层 */
+.minor-card{background:rgba(23,25,28,.018)}
+.minor-card h2{font-size:15px;color:#33373D}
 
 textarea{width:100%;min-height:88px;resize:vertical;border:1px solid var(--hair);border-radius:6px;padding:10px 12px;font:inherit;background:#fff;color:var(--ink);outline:none}
 textarea:focus{border-color:var(--ink)}
@@ -169,11 +174,29 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radiu
 .labtab.active{color:var(--ink);font-weight:600}
 .labtab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:2px;background:var(--coat)}
 .steps{list-style:none;margin:0;padding:0}
-.steps li{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:8px 0;font-size:14px;color:var(--faint)}
-.steps li .s{width:22px;height:22px;border-radius:50%;border:1px solid #C3C8C3;display:grid;place-items:center;font-family:var(--serif);font-size:12px;margin-top:2px}
-.steps li.done{color:var(--muted)} .steps li.done .s{background:var(--ink);border-color:var(--ink);color:#fff;font-family:var(--sans);font-size:11px}
-.steps li.now{color:var(--ink)} .steps li.now .s{border:1.5px solid var(--coat);color:var(--coat);font-weight:600}
-.steps li b{color:inherit;font-weight:600}
+.steps li{display:grid;grid-template-columns:24px 1fr;gap:10px;padding:5px 8px;margin:0 -8px;font-size:13.5px;color:var(--faint);border-radius:6px}
+.steps li .s{width:20px;height:20px;border-radius:50%;border:1px solid #C3C8C3;display:grid;place-items:center;font-family:var(--serif);font-size:11.5px;margin-top:1px}
+.steps li .t b{color:inherit;font-weight:600}
+.steps li .d{display:none}
+.steps li .d::before{content:'：'}
+/* 已完成、未开始：只留标题，点开看说明 */
+.steps li.done,.steps li.later{cursor:pointer}
+.steps li.done:hover,.steps li.later:hover{background:rgba(23,25,28,.035)}
+.steps li.done{color:var(--muted)} .steps li.done .s{background:var(--ink);border-color:var(--ink);color:#fff;font-family:var(--sans);font-size:10.5px}
+.steps li.done .t b{font-weight:500}
+.steps li.open .d{display:inline;font-weight:400}
+.steps li.done .t::after,.steps li.later .t::after{content:'展开';margin-left:8px;font-size:11.5px;color:var(--faint);opacity:0;transition:opacity .15s}
+.steps li.open .t::after{content:'收起'}
+.steps li.done:hover .t::after,.steps li.later:hover .t::after,.steps li:focus-visible .t::after{opacity:1}
+/* 当前步骤：整页的视觉重点 */
+.steps li.now{color:var(--ink);background:var(--coat-soft);border-radius:0 6px 6px 0;padding:10px 10px 11px 8px;margin:6px -8px;box-shadow:inset 3px 0 0 var(--coat);font-size:14px;line-height:1.75}
+.steps li.now .s{background:var(--coat);border-color:var(--coat);color:#fff;font-weight:600;margin-top:3px}
+.steps li.now .t b{font-size:15px;display:block;margin-bottom:2px}
+.steps li.now .d{display:inline}
+.steps li.now .d::before{content:none}
+.steps li:focus-visible{outline:2px solid var(--coat);outline-offset:1px}
+.lab-title{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.lab-title .prog{margin-left:auto;font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0;color:var(--coat)}
 details.principle{margin-top:12px;font-size:13.5px;color:#3A3E44;border-top:1px solid var(--hair-2);padding-top:10px}
 details.principle summary{cursor:pointer;font-family:var(--serif);font-weight:600;letter-spacing:1px;color:var(--ink)}
 details.principle p{margin:8px 0 0}
@@ -185,8 +208,8 @@ table.data td{padding:4px 6px;text-align:right}
 table.data td:first-child,table.data th:first-child{text-align:center}
 table.data tr.warn td{color:var(--bad)}
 .empty{color:var(--faint);font-size:13.5px;padding:12px 0 0}
-.result{margin-top:14px;font-size:13.5px;color:var(--muted);line-height:1.8}
-.result .big{font-size:22px;font-weight:300;color:var(--ink);font-variant-numeric:tabular-nums;margin:0 4px}
+.result{margin-top:16px;padding-top:12px;border-top:1px solid var(--hair-2);font-size:13.5px;color:var(--muted);line-height:1.8}
+.result .big{font-size:18px;font-weight:400;color:var(--ink);font-variant-numeric:tabular-nums;margin:0 3px}
 .result b{color:var(--ink);font-variant-numeric:tabular-nums}
 .lab-grid{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:18px;padding:14px 16px 18px;align-items:start}
 @media (max-width:760px){.lab-grid{grid-template-columns:1fr}}
@@ -212,6 +235,9 @@ table.data tr.warn td{color:var(--bad)}
 /* ---------------- 不确定度、数环核对 ---------------- */
 .unc{margin-top:6px;padding-top:6px;border-top:1px dashed var(--hair);font-size:13px;color:var(--muted)}
 .unc b{color:var(--ink);font-family:var(--math);font-weight:400;font-size:15px}
+/* 规范结果：每个实验最终要报告的那一行 */
+.unc>div:last-child{margin:10px 0 2px;padding:8px 12px;background:var(--coat-soft);box-shadow:inset 3px 0 0 var(--coat);border-radius:0 6px 6px 0;color:var(--ink);font-size:13.5px;line-height:1.7}
+.unc>div:last-child b{font-size:17.5px;font-weight:500;white-space:nowrap}
 .segcheck{margin-top:12px;font-size:13px}
 .segcheck table.data{margin-top:6px}
 .segcheck td:last-child{text-align:left;font-size:12.5px}

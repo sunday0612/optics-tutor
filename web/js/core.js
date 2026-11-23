@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -143,13 +143,13 @@ function aiErrorNote(e){
 function labShell(p, {title, principle, right}){
   return `<section>
     <div class="card">
-      <h2><span class="n">实验</span>${title}</h2>
+      <h2 class="lab-title" data-title="${title}"><span class="n">实验</span>${title}<span class="prog" id="${p}-prog"></span></h2>
       <ol class="steps" id="${p}-steps"></ol>
       <details class="principle"><summary>实验原理</summary>${principle}</details>
     </div>
-    <div class="card">
+    <div class="card data-card">
       <h2><span class="n">记录</span>数据记录</h2>
-      <div class="row" style="margin-top:0;flex-wrap:wrap">
+      <div class="row rec-bar" style="margin-top:0;flex-wrap:wrap">
         <button class="primary" id="${p}-rec">记录读数</button>
         <button class="ghost" id="${p}-undo">撤销</button>
         <button class="ghost" id="${p}-clr">清空</button>
@@ -158,12 +158,12 @@ function labShell(p, {title, principle, right}){
       <div id="${p}-table"></div>
       <div id="${p}-result"></div>
     </div>
-    <div class="card">
+    <div class="card minor-card">
       <h2><span class="n">批改</span>AI 助教检查数据</h2>
       <button class="primary" id="${p}-check">检查我的数据</button>
       <div id="${p}-review" style="margin-top:10px"></div>
     </div>
-    <div class="card report-card">
+    <div class="card report-card minor-card">
       <h2><span class="n">报告</span>导出实验报告</h2>
       <div class="hint" style="margin-top:0">包含实验原理、步骤完成情况、数据表、计算结果与不确定度、图表、当前视场和 AI 评语。可以先做 AI 批改再导出。</div>
       <div class="row rep-who"><input data-rep="name" placeholder="姓名（可不填）"><input data-rep="sid" placeholder="学号"><input data-rep="cls" placeholder="班级"></div>
@@ -190,10 +190,19 @@ function turnControls(p, speeds, {assist='辅助计数', left='◀ 反转', righ
     ${assist?`<label style="display:flex;align-items:center;gap:5px"><input type="checkbox" id="${p}-assist" checked>${assist}</label>`:''}
   </div>`;
 }
+/* 步骤列表：当前步骤完整显示；已完成、未开始的只显示标题，点击展开说明 */
+const stepsOpen={};
 function renderSteps(p, list){
-  const now=list.findIndex(x=>!x[0]);
-  $('#'+p+'-steps').innerHTML=list.map(([ok,t],i)=>`<li class="${ok?'done':i===now?'now':''}"><span class="s">${ok?'✓':i+1}</span><span>${t}</span></li>`).join('');
+  const now=list.findIndex(x=>!x[0]), open=stepsOpen[p]||(stepsOpen[p]=new Set());
+  const split=t=>{ const i=t.indexOf('</b>'); if (!t.startsWith('<b>')||i<0) return [t,'']; return [t.slice(3,i), t.slice(i+4).replace(/^[：:]\s*/,'')]; };
+  $('#'+p+'-steps').innerHTML=list.map(([ok,t],i)=>{ const [title,desc]=split(t), cls=ok?'done':i===now?'now':'later';
+    return `<li class="${cls}${open.has(i)?' open':''}" data-i="${i}"${cls!=='now'&&desc?' tabindex="0" role="button" aria-expanded="'+open.has(i)+'"':''}><span class="s">${ok?'✓':i+1}</span><span class="t"><b>${title}</b>${desc?`<span class="d">${desc}</span>`:''}</span></li>`; }).join('');
+  const prog=$('#'+p+'-prog'); if (prog) prog.textContent=now<0?'全部完成':`第 ${now+1} 步 / 共 ${list.length} 步`;
 }
+document.addEventListener('click',e=>{ const li=e.target.closest('.steps li[data-i]'); if (!li||li.classList.contains('now')||!li.querySelector('.d')) return;
+  const p=li.parentElement.id.replace(/-steps$/,''), i=+li.dataset.i, set=stepsOpen[p]||(stepsOpen[p]=new Set());
+  set.has(i)?set.delete(i):set.add(i); li.classList.toggle('open'); li.setAttribute('aria-expanded',set.has(i)); });
+document.addEventListener('keydown',e=>{ if ((e.key==='Enter'||e.key===' ')&&e.target.matches?.('.steps li[tabindex]')){ e.preventDefault(); e.target.click(); } });
 /* 装置区：“三维模型 / 示意图”切换。build(viewer, getState) 返回 update() */
 function benchArea(P, build, getState, {cap3d='三维模型'}={}){
   const canvas=$('#'+P+'-bench'), wrap=canvas.parentElement, cap=wrap.querySelector('.caption'), cap2d=cap.textContent;
@@ -301,6 +310,7 @@ const Report = (() => {
       if (n.nodeType===3){ const t=n.textContent.replace(/\s+/g,' '); if (t.trim()||(t===' '&&out.length)) out.push({t, ...f}); continue; }
       if (n.nodeType!==1 || SKIP.has(n.tagName) || n.hidden) continue;
       if (n.tagName==='BR'){ out.push({t:'\n'}); continue; }
+      if (n.classList.contains('d') && out.length) out.push({t:'：', ...f});   // 步骤标题与说明之间（页面上用 CSS 补的冒号）
       runsOf(n, {...f, ...(n.tagName==='B'||n.tagName==='STRONG'?{b:true}:{}), ...(n.tagName==='SUB'?{sub:true}:{}), ...(n.tagName==='SUP'?{sup:true}:{})}, out);
     }
     return out;
@@ -334,7 +344,7 @@ const Report = (() => {
   }
   function collect(P){
     const box=document.getElementById(P+'-rec')?.closest('.labwrap');
-    const title=(box?.querySelector('h2')?.textContent||'').replace(/^实验/,'').trim();
+    const title=box?.querySelector('h2[data-title]')?.dataset.title||'';
     const sections=[];
     const prin=box?.querySelector('details.principle');
     if (prin) sections.push({h:'一、实验原理', blocks:[...prin.querySelectorAll('p')].map(p=>({p:tidy(runsOf(p))})).filter(b=>b.p.length)});
