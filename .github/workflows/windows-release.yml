@@ -72,8 +72,7 @@ jobs:
           Path("release-notes.md").write_text(
               "Windows 10/11 64 位独立程序，下载 exe 后双击运行，无需安装 Python。\n\n"
               "不内置 API Key。现象仿真和虚拟实验可离线使用；联网 AI 讲解、批改需在设置中填写自己的 DeepSeek API Key。\n\n"
-              "v1.7.1 优化虚拟实验页面的视觉层级：当前步骤突出显示、其余步骤收起为标题；最终结果单独高亮；“记录读数”按钮在数据区滚动时吸附在顶部；AI 批改和导出报告退为次要区域。
-",
+              "v1.7.1 优化虚拟实验页面的视觉层级：当前步骤突出显示、其余步骤收起为标题；最终结果单独高亮；“记录读数”按钮在数据区滚动时吸附在顶部；AI 批改和导出报告退为次要区域。\n",
               encoding="utf-8")
       - name: Upload Windows executable for review
         if: github.ref != 'refs/heads/main'
