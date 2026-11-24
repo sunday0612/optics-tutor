@@ -70,9 +70,9 @@ button{font:inherit;cursor:pointer;color:inherit}
 /* ---------------- 主体布局：软件式分栏 ----------------
  * 窗口高度固定，左栏（记录纸）和右栏（仪器面板）各自滚动，仪器面板始终铺满右侧。 */
 main{flex:1;min-height:0;width:100%;max-width:1400px;margin:0 auto;padding:20px 32px 18px;display:flex;flex-direction:column}
-#view-sim,.labwrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(330px,410px) 1fr;grid-template-rows:minmax(0,1fr);gap:24px}
+#view-sim,.labwrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(330px,410px) minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:24px}
 #view-lab .labwrap,#view-data .labwrap{gap:24px}
-#view-sim>section,.labwrap>section{min-height:0;display:flex;flex-direction:column}
+#view-sim>section,.labwrap>section{min-height:0;min-width:0;display:flex;flex-direction:column}
 #view-sim>section>.card,.labwrap>section>.card{flex:none}
 #view-sim>section:first-child,.labwrap>section:first-child{background:var(--paper);border:1px solid var(--hair);border-radius:10px;overflow:auto;overscroll-behavior:contain}
 #view-sim>section:last-child>.card.scope,.labwrap>section:last-child>.card.scope{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
@@ -86,7 +86,7 @@ section::-webkit-scrollbar-track,.card.scope::-webkit-scrollbar-track{background
   body{display:block;overflow:auto;height:auto}
   main{display:block;padding:16px}
   .top-inner{padding:10px 16px;gap:18px;flex-wrap:wrap}
-  #view-sim,.labwrap{grid-template-columns:1fr;grid-template-rows:auto}
+  #view-sim,.labwrap{grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
   #view-sim>section:first-child,.labwrap>section:first-child,#view-sim>section:last-child>.card.scope,.labwrap>section:last-child>.card.scope{overflow:visible}
   main#view-lab,main#view-data{display:block}
   .card.scope>.canvas-wrap.fill{flex:none;height:240px}
@@ -337,3 +337,9 @@ footer{flex:none;background:var(--paper);border-top:1px solid var(--hair);color:
 .udt{overflow-x:auto}
 .udt table.data{font-size:12.5px;margin-top:8px}
 .udt th,.udt td{white-space:nowrap}
+.ud input.ex,.ud select.ex{color:var(--faint);font-style:italic;background:rgba(23,25,28,.025)}
+.data-card [id$="-result"]>.result:first-child,.data-card [id$="-result"]>.empty:first-child{margin-top:2px;padding-top:0;border-top:0}
+details.rawdata{margin-top:16px;border-top:1px solid var(--hair-2);padding-top:10px}
+details.rawdata summary{cursor:pointer;font-size:13.5px;color:var(--muted)}
+details.rawdata summary:hover{color:var(--ink)}
+details.rawdata[open] summary{margin-bottom:4px}

@@ -35,7 +35,8 @@ const BM = (() => {
       title:'激光光束半径、发散角与 M²',
       principle:`<p>He-Ne 激光的横截面光强接近高斯分布 I(r) = I₀·exp(−2r²/w²)，<b>光斑半径 w</b> 是光强降到中心 1/e²（13.5%）处的半径。光束沿传播方向按双曲线变化：<b>w(z)² = W₀²[1 + ((z − z₀)/z<sub>R</sub>)²]</b>，W₀ 是束腰半径，z₀ 是束腰位置，z<sub>R</sub> = πW₀²/(M²λ) 是瑞利长度。远场全发散角 θ = 2M²λ/(πW₀)。理想高斯光束 M² = 1，实际激光略大于 1。</p>
         <p><b>刀口法</b>：刀片垂直光束横向推进，挡住一侧，探测器测透过的功率。透过功率 P(x) = (P₀/2)·erfc[√2(x − x<sub>c</sub>)/w]，对 P–x 数据拟合误差函数就能得到 w；粗略地，透过 90% 和 10% 两点的距离约为 1.28w。</p>
-        <p><b>求束腰和 M²</b>：在导轨上多个位置测出 w，把 w² 写成 z 的二次式 w² = a + bz + cz²，最小二乘拟合后 z₀ = −b/(2c)，W₀² = a − b²/(4c)，半发散角 √c，z<sub>R</sub> = W₀/√c，<b>M² = πW₀√c/λ</b>。只在激光器外面测，束腰在激光器内部，拟合要外推、不确定度大；<b>进阶</b>：在 ${ZL} mm 处放 f = ${F} mm 的透镜，新的束腰落在导轨上，在束腰两侧各测几个点，结果更可靠（这也是测 M² 的标准做法）。</p>
+        <p><b>求束腰和 M²</b>：在导轨上多个位置测出 w，把 w² 写成 z 的二次式 w² = a + bz + cz²，最小二乘拟合后 z₀ = −b/(2c)，W₀² = a − b²/(4c)，半发散角 √c，z<sub>R</sub> = W₀/√c，<b>M² = πW₀√c/λ</b>。只在激光器外面测，束腰在激光器内部，拟合要外推、不确定度大；<b>进阶</b>：在 ${ZL} mm 处放 f = ${F} mm 的透镜，新的束腰落在导轨上，在束腰两侧各测几个点，结果更可靠（测点分布与 ISO 11146 的要求一致）。</p>
+        <p><b>适用范围</b>：这里的光斑半径是把刀口曲线按理想高斯分布拟合得到的 1/e² 半径，所以 M² 是<b>近高斯光束的教学估计</b>。ISO 11146 用光强分布的二阶矩定义束宽；对接近基模（TEM₀₀）的光束两者基本一致，对多模或明显非高斯的光束（如未整形的半导体激光直接输出）会有偏差。要按标准报告 M²，需要先验证刀口束宽与二阶矩束宽在所测光束上等效。</p>
         <p>不确定度：每个 w 由误差函数拟合的协方差矩阵给出；W₀、M² 等由二次拟合的协方差矩阵传递。功率计读数有约 0.5% 的起伏。</p>`,
       right:`<div class="canvas-wrap fill"><canvas id="${P}-bench"></canvas><div class="caption">装置示意（导轨刻度单位 mm）</div></div>
       <div class="lab-grid">
@@ -177,10 +178,13 @@ const BM = (() => {
     const uA=Ci?Math.sqrt(Math.max(0,Ci[2][2]*s2)):null, uB=Math.SQRT2*INST/Unc.SQRT3/1.2816;   // B 类：两次位置读数之差
     return {Pm:p[0], xc:p[1], w:p[2], uA, uB, u:Unc.combine(uA,uB), w1090:(x10-x90)/1.2816, inMid, rms:Math.sqrt(cur/xs.length)};
   }
+  /* 拟合结果按扫描数据缓存：调仪器时会频繁重绘，已记录的组不必每次重新拟合 */
+  const fitMemo=new Map();
+  function fitOnce(pts){ const k=JSON.stringify(pts.map(p=>[p.x,p.P])); if (!fitMemo.has(k)){ if (fitMemo.size>300) fitMemo.clear(); fitMemo.set(k, erfFit(pts)); } return fitMemo.get(k); }
   function groups(){
     const m=new Map();
     s.rows.forEach(r=>{ const k=(r.lens?'L':'D')+r.z; if (!m.has(k)) m.set(k,{lens:!!r.lens, z:r.z, pts:[]}); m.get(k).pts.push(r); });
-    return [...m.values()].sort((a,b)=>(a.lens-b.lens)||(a.z-b.z)).map(g=>{ const f=erfFit(g.pts); return {...g, n:g.pts.length, fit:f&&!f.bad?f:null, bad:f&&f.bad?f:null, wTrue:wAt(g.z,g.lens)}; });
+    return [...m.values()].sort((a,b)=>(a.lens-b.lens)||(a.z-b.z)).map(g=>{ const f=fitOnce(g.pts); return {...g, n:g.pts.length, fit:f&&!f.bad?f:null, bad:f&&f.bad?f:null, wTrue:wAt(g.z,g.lens)}; });
   }
   /* w² = a + b·z + c·z²：求 z₀、W₀、发散角、瑞利长度和 M²，并用协方差矩阵传递不确定度 */
   function hyper(gs, lens){
@@ -271,6 +275,6 @@ ${[['直接测量',c.D],['透镜后',c.L]].map(([n,h])=>h&&!h.invalid?`${n}二�
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
-  (globalThis.LabMath||(globalThis.LabMath={})).beam={erfFit};   // “处理我的数据”复用刀口拟合
+  (globalThis.LabMath||(globalThis.LabMath={})).beam={erfFit:fitOnce};   // “处理我的数据”复用刀口拟合
   return {mount, render, key};
 })();

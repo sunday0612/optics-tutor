@@ -245,7 +245,8 @@ const MyData = (() => {
         const items = c.rows.map(x => { const phi = phiOf(x); return {...x, phi, d: phi > 0 ? lam / Math.sin(rad(phi)) : NaN}; });
         items.forEach(x => check(x, `光栅常数第 ${x.no} 行`));
         out.table += sub('测光栅常数（已知谱线 ' + lam + ' nm）', true) + T(['次数', 'θ₁', 'θ₂', 'θ₁′', 'θ₂′', 'φ', 'd / nm'], items.map((x, i) => [i + 1, x.raw.t1, x.raw.t2, x.raw.t1p, x.raw.t2p, dms(x.phi), Number.isFinite(x.d) ? x.d.toFixed(1) : '—']));
-        const ok = items.filter(x => x.d > 0);
+        const ok = items.filter(x => x.d > 0 && Number.isFinite(x.d));
+        if (items.length > ok.length) out.issues.push('光栅常数：有的行 +1 级与 −1 级读数相同（φ = 0），无法计算，可能抄错了');
         if (ok.length){
           uPhi = rad(inst / (2 * Unc.SQRT3));
           const m = mean(ok.map(x => x.d)), sum = Unc.summarize(ok.map(x => x.d), m / Math.tan(rad(mean(ok.map(x => x.phi)))) * uPhi);
@@ -383,7 +384,15 @@ const MyData = (() => {
             const v11 = Mi[1][1] * s2, v22 = Mi[2][2] * s2, v12 = Mi[1][2] * s2;
             const uA = deg(0.5 * Math.sqrt(Math.max(0, a1 * a1 * v22 + a2 * a2 * v11 - 2 * a1 * a2 * v12)) / (C * C)), uB = m.prm.inst / Unc.SQRT3, u = Unc.combine(uA, uB);
             const my = mean(y), r2 = 1 - ss / y.reduce((q, v) => q + (v - my) ** 2, 0), par = ((deg(0.5 * Math.atan2(a2, a1)) % 180) + 180) % 180;
-            const Imax = a0 + C, Imin = a0 - C;
+            const Imax = a0 + C, Imin = a0 - C, sd = Math.sqrt(s2), peak = Math.max(...y.map(Math.abs));
+            const fail = !(peak > 0) ? '光强全部为零：检查光源是否打开、光路是否被遮挡、功率计是否接好、探头是否对准，以及量程是否太大'
+              : !(C > 3 * sd) || !(C > 0.05 * Math.abs(a0)) ? `光强几乎不随检偏器角度变化（调制幅度 ${sig(C, 3)}，读数离散 ${sig(sd, 3)}）：检查起偏器是否装上、检偏器是否真的在转动、杂散光是否太强，以及功率计是否饱和（量程太小）`
+              : ![par, u, Imax, Imin].every(Number.isFinite) ? '拟合得到的结果不是有限值，检查数据' : '';
+            if (fail){
+              out.result += `<div class="result"><div class="note"><b>马吕斯定律：无法确定平行位置。</b>${fail}。这组数据不能作为实验结论。</div></div>`;
+              out.issues.push('马吕斯定律：无法确定平行位置——' + fail);
+              out.ai.push(`马吕斯定律：（θ, I）${r.map(x => `(${x.raw.th}, ${x.raw.I})`).join('、')}；程序判定无法确定平行位置：${fail}。`);
+            } else {
             out.result += `<div class="result">马吕斯定律：最小二乘拟合 I = I<sub>min</sub> + (I<sub>max</sub> − I<sub>min</sub>)·cos²(θ − θ<sub>∥</sub>)
               <div>I<sub>max</sub> = ${Imax.toFixed(2)}，I<sub>min</sub> = ${Imin.toFixed(2)}，消光比 ${(Imin / Imax * 100).toFixed(2)}%，R² = ${r2.toFixed(5)}</div>
               <div>平行位置 θ<sub>∥</sub> = <span class="big">${par.toFixed(2)}°</span>（正交消光位置 ${((par + 90) % 180).toFixed(2)}°）</div>
@@ -393,8 +402,10 @@ const MyData = (() => {
             if (r2 < 0.995) out.issues.push(`马吕斯定律：拟合 R² = ${r2.toFixed(4)}，偏离 cos² 关系较明显，检查是否有读数错误或光源不稳定`);
             if (Imin / Imax > 0.02) out.issues.push(`马吕斯定律：消光比 ${(Imin / Imax * 100).toFixed(1)}% 偏大，可能有杂散光进入探测器，或偏振片质量不好`);
             res.forEach((v, k) => { if (Math.abs(v) > 3 * Math.sqrt(s2) && Math.abs(v) > 0.02 * Imax) out.issues.push(`马吕斯定律：θ = ${r[k].raw.th}° 的光强偏离拟合曲线较大，可能读错`); });
+            if (Imin < -3 * sd) out.issues.push(`马吕斯定律：拟合的 I_min = ${Imin.toFixed(2)} 明显小于 0，功率计可能没有调零或扣除本底时扣多了`);
             out.ai.push(`马吕斯定律：（θ, I）${r.map(x => `(${x.raw.th}, ${x.raw.I})`).join('、')}；Imax = ${Imax.toFixed(2)}，Imin = ${Imin.toFixed(2)}，R² = ${r2.toFixed(5)}，θ∥ = ${par.toFixed(2)}° ± ${u.toFixed(2)}°。`);
             out.ok = true;
+            }
           }
         }
       }
@@ -439,7 +450,12 @@ const MyData = (() => {
         groups.forEach((G, k) => { out.table += sub(`P–I：T = ${G.T} °C（${G.r.length} 个点，线性段 ${G.lin.length} 个）`, k === 0) + T(['I / mA', ...G.r.map(x => x.raw.I)], [['P / mW', ...G.r.map(x => x.raw.P)]], 'plt'); });
         let h = '';
         groups.forEach(G => {
-          if (!G.fit){ h += `<div class="hint">T = ${G.T} °C：功率不低于 ${sig(G.plin, 3)} mW 的点少于 3 个，无法拟合线性段。</div>`; return; }
+          const pmax = Math.max(...G.r.map(x => x.P));
+          if (!(pmax > 0)){ h += `<div class="note">T = ${G.T} °C：功率全部为零，无法确定阈值。检查激光器是否出光、功率计探头是否对准、量程是否太大。</div>`; out.issues.push(`P–I（${G.T} °C）：功率全部为零`); return; }
+          if (!G.fit){ h += `<div class="hint">T = ${G.T} °C：功率不低于 ${sig(G.plin, 3)} mW 的点少于 3 个，或功率没有随电流增大，无法拟合线性段。</div>`; return; }
+          const Imax = Math.max(...G.r.map(x => x.I));
+          if (!(G.fit.ith > 0) || G.fit.ith > Imax){ const why = G.fit.ith > 0 ? '超出了测量的最大电流' : '小于 0，说明没有测到阈值以下的点，或线性段下限设得太低';
+            h += `<div class="note">T = ${G.T} °C：拟合得到的阈值电流 ${G.fit.ith.toFixed(2)} mA ${why}，不能作为结果。</div>`; out.issues.push(`P–I（${G.T} °C）：阈值电流 ${why}`); G.fit = null; return; }
           const f = G.fit, ed = f.eta * g.prm.lam / 1239.84;
           h += `<div class="result">T = ${G.T} °C：线性段拟合 P = η(I − I<sub>th</sub>)，R² = ${f.r2.toFixed(5)}
             <div>阈值电流 I<sub>th</sub> = <span class="big">${fmtU(f.ith, f.uith, 'mA')}</span>，斜率效率 η = ${fmtU(f.eta, f.ueta, 'W/A')}，外微分量子效率 η<sub>d</sub> = ${(ed * 100).toFixed(1)}%</div></div>`;
@@ -464,6 +480,7 @@ const MyData = (() => {
         out.table += sub('光电二极管', !g.rows.length) + T(['P / mW', ...r.map(x => x.raw.P)], [['I<sub>ph</sub> / µA', ...r.map(x => x.raw.I)]], 'plt');
         const f = r.length >= 3 ? linfit(r.map(x => x.P), r.map(x => x.I)) : null;
         if (!f) out.result += '<div class="hint">光电二极管：至少需要 3 组不同功率的数据。</div>';
+        else if (!(f.b > 0) || !(f.b > 3 * (f.sb || 0))){ out.result += '<div class="note">光电二极管：光电流没有随入射功率明显增大，无法确定响应度。检查光电二极管是否对准光束、偏置和电流表接线，以及读数单位。</div>'; out.issues.push('光电二极管：光电流不随功率增大，无法确定响应度'); }
         else {
           const R = f.b / 1000, uA = f.sb != null ? f.sb / 1000 : null, uB = R * d.prm.acc / 100 / Unc.SQRT3, u = Unc.combine(uA, uB), qe = R * 1239.84 / d.prm.lam;
           out.result += `<div class="result">光电二极管：I<sub>ph</sub> 对 P 直线拟合，R² = ${f.r2.toFixed(5)}，截距 ${f.a.toFixed(3)} µA${d.prm.dark != null ? `（实测暗电流 ${d.prm.dark} µA）` : ''}
@@ -495,11 +512,13 @@ const MyData = (() => {
     if (lo < 2 || hi < 2) why.push(`束腰两侧的测量位置不均衡（前侧 ${lo} 个、后侧 ${hi} 个），束腰位置和 W₀ 要靠外推`);
     if (reach < v.zR) why.push(`离束腰最远的点只有 ${reach.toFixed(0)} mm，不到一个瑞利长度（约 ${v.zR.toFixed(0)} mm），测不出远场发散`);
     if (u.M2 != null && u.M2 > 0.3 * v.M2) why.push('M² 的相对不确定度超过 30%');
-    return {...v, u, n, lo, hi, why, reliable: !why.length};
+    const resid = Math.sqrt(mean(zs.map((z, k) => (Math.sqrt(Math.max(0, a + b * z + c * z * z)) / ws[k] - 1) ** 2)));
+    return {...v, u, n, lo, hi, reach, resid, why, reliable: !why.length};
   }
   SPECS.beam = {P: 'ubm', title: '激光光束半径、发散角与 M²（实测数据）', ai: '刀口法测激光光束半径、束腰、发散角与 M²',
     principle: `<p><b>刀口法</b>：刀片横向推进挡光，透过功率 P(x) = (P₀/2)·erfc[√2(x − x<sub>c</sub>)/w]，对 P–x 数据作误差函数拟合得到光斑半径 w（1/e² 半径）。</p>
-      <p><b>束腰与 M²</b>：在多个位置 z 测 w，把 w² 写成 a + bz + cz² 作最小二乘拟合：z₀ = −b/(2c)，W₀² = a − b²/(4c)，半发散角 √c，z<sub>R</sub> = W₀/√c，<b>M² = πW₀√c/λ</b>。测量点应分布在束腰两侧，并有离束腰一个瑞利长度以外的点（ISO 11146 的做法）。</p>
+      <p><b>束腰与 M²</b>：在多个位置 z 测 w，把 w² 写成 a + bz + cz² 作最小二乘拟合：z₀ = −b/(2c)，W₀² = a − b²/(4c)，半发散角 √c，z<sub>R</sub> = W₀/√c，<b>M² = πW₀√c/λ</b>。测量点应分布在束腰两侧，并有离束腰一个瑞利长度以外的点（参照 ISO 11146 对测点分布的要求）。</p>
+      <p><b>适用范围</b>：这里的光斑半径是把刀口曲线按理想高斯分布拟合得到的 1/e² 半径，所以 M² 是<b>近高斯光束的教学估计</b>。ISO 11146 用光强分布的二阶矩定义束宽；对接近基模（TEM₀₀）的光束两者基本一致，对多模或明显非高斯的光束（如未整形的半导体激光）会有偏差。要按标准报告 M²，需要先验证刀口束宽与二阶矩束宽在所测光束上等效。</p>
       <p>如果你用光束分析仪或其他方法直接得到了各位置的 w，可以在“直接输入光斑半径”中录入。</p>`,
     groups: [
       {id: 'scan', name: '刀口扫描数据', desc: '每一行一个点：导轨位置 z、刀口位置 x、透过功率 P。同一 z 的点会自动分成一组拟合，每组至少 6 个点，并覆盖透过率 10%～90%。',
@@ -519,13 +538,15 @@ const MyData = (() => {
         if (!h || h.invalid) { out.issues.push(`${tag}：二次拟合得不到合理的束腰（开口向下或 W₀² < 0），位置太集中或有点测错`); return `<div class="note">${tag}：二次拟合得不到合理的束腰，多换几个位置或检查数据。</div>`; }
         if (!h.reliable) out.issues.push(`${tag}：结果不可信——${h.why.join('；')}`);
         out.charts = (out.charts || []).concat([cv => plot(cv, {pts: zs.map((z, i) => [z, ws[i]]), fit: z => h.W0 * Math.sqrt(1 + ((z - h.z0) / h.zR) ** 2), xl: 'z / mm', yl: 'w / mm'})]);
-        out.ai.push(`${tag}：（z, w）${zs.map((z, i) => `(${z}, ${ws[i].toFixed(4)})`).join('、')}；W₀ = ${h.W0.toFixed(4)} mm，z₀ = ${h.z0.toFixed(0)} mm，全发散角 ${(2 * h.th * 1000).toFixed(3)} mrad，zR = ${h.zR.toFixed(0)} mm，M² = ${h.M2.toFixed(3)}${h.u.M2 != null ? ` ± ${h.u.M2.toFixed(3)}` : ''}；${h.reliable ? '分布检查通过' : '程序判定不可信：' + h.why.join('，')}。`);
+        out.ai.push(`${tag}：（z, w）${zs.map((z, i) => `(${z}, ${ws[i].toFixed(4)})`).join('、')}；W₀ = ${h.W0.toFixed(4)} mm，z₀ = ${h.z0.toFixed(0)} mm，全发散角 ${(2 * h.th * 1000).toFixed(3)} mrad，zR = ${h.zR.toFixed(0)} mm，M² = ${h.M2.toFixed(3)}（近高斯光束的教学估计；束腰前 ${h.lo} 个、后 ${h.hi} 个测点，最远 ${(h.reach / h.zR).toFixed(1)} zR，w 残差 ${(h.resid * 100).toFixed(1)}%）${h.u.M2 != null ? ` ± ${h.u.M2.toFixed(3)}` : ''}；${h.reliable ? '分布检查通过' : '程序判定不可信：' + h.why.join('，')}。`);
         out.ok = out.ok || h.reliable;
         return `<div class="result${h.reliable ? '' : ' unreliable'}">${tag}：w² 对 z 二次拟合（${h.n} 个位置）
           ${h.reliable ? '' : `<div class="note"><b>这组结果不可信，不能作为实验结论。</b>${h.why.join('；')}。建议在束腰前后各测 2～3 个位置，并在离束腰一个瑞利长度以外补测。</div>`}
           <div>束腰半径 W₀ = <b>${fmtU(h.W0, h.u.W0, 'mm')}</b>，束腰位置 z₀ = ${fmtU(h.z0, h.u.z0, 'mm')}</div>
           <div>全发散角 θ = <b>${fmtU(2 * h.th * 1000, h.u.th != null ? 2 * h.u.th * 1000 : null, 'mrad')}</b>，瑞利长度 z<sub>R</sub> = ${fmtU(h.zR, h.u.zR, 'mm')}</div>
-          <div>${h.reliable ? `<span class="big">M² = ${fmtU(h.M2, h.u.M2)}</span>` : `M² = ${fmtU(h.M2, h.u.M2)}（不可信）`}</div><canvas class="chart" data-plot="${chartKey}"></canvas></div>`;
+          <div>${h.reliable ? `<span class="big">M² = ${fmtU(h.M2, h.u.M2)}</span>` : `M² = ${fmtU(h.M2, h.u.M2)}（不可信）`}</div>
+          <div class="hint">方法与适用范围：${chartKey === 'bm1' ? '刀口曲线按高斯分布拟合的' : '直接输入的'} 1/e² 光斑半径，M² 为近高斯光束的教学估计（不是 ISO 11146 的二阶矩法）。测点：束腰前 ${h.lo} 个、后 ${h.hi} 个，最远离束腰 ${(h.reach / h.zR).toFixed(1)} 个瑞利长度；二次拟合后 w 的均方根相对残差 ${(h.resid * 100).toFixed(1)}%。</div>
+          <canvas class="chart" data-plot="${chartKey}"></canvas></div>`;
       };
       if (sc.rows.length){
         const byZ = new Map(); sc.rows.forEach(x => { if (!byZ.has(x.z)) byZ.set(x.z, []); byZ.get(x.z).push(x); });
@@ -614,7 +635,20 @@ const MyData = (() => {
 
   /* ================= 页面与交互 ================= */
   const S = {};                                   // 各实验的存档对象
-  const blank = spec => ({g: spec.groups[0].id, prm: {}, rows: [], ex: {}, checked: false, review: ''});   // ex：哪些组是示例数据
+  const blank = spec => ({g: spec.groups[0].id, prm: {}, rows: [], ex: {}, checked: false, review: ''});   // ex：v1.8.0 按组记录示例数据，读入后转成逐格标记
+  /* 数据来源逐格记录：行对象的 x[j] = 1 表示这一格仍是“填入示例数据”生成的值，学生改过或粘贴过就清零 */
+  const filled = r => r.v.some(v => String(v ?? '').trim());
+  const exCell = (r, j) => !!(r.x && r.x[j] && String(r.v[j] ?? '').trim());
+  const isEx = r => r.v.some((_, j) => exCell(r, j));
+  function provenance(spec, s){
+    let mine = 0, e = 0; const where = [];          // 按格计数：自己填的格子 / 示例格子
+    spec.groups.forEach(g => { const rows = rowsOf(s, g.id), no = []; let gm = 0;
+      rows.forEach((r, i) => { if (!filled(r)) return; r.v.forEach((v, j) => { if (!String(v ?? '').trim()) return; if (exCell(r, j)) e++; else { mine++; gm++; } }); if (isEx(r)) no.push(i + 1); });
+      if (no.length) where.push({g, no, all: !gm}); });
+    return {source: !e ? 'real' : !mine ? 'example' : 'mixed', where};
+  }
+  /* 存档时去掉空行（空行只是录入用的占位） */
+  const saveS = (P, s) => LabStore.save(P, {...s, rows: s.rows.filter(filled)});
   const grp = (spec, s) => spec.groups.find(x => x.id === s.g) || spec.groups[0];
   const rowsOf = (s, gid) => s.rows.filter(r => r.g === gid);
   const prmVal = (s, g, p) => { const v = s.prm[g.id]?.[p.k]; return v == null ? p.def : v; };
@@ -641,6 +675,7 @@ const MyData = (() => {
   function compute(spec, s){
     const cache = {}, D = gid => cache[gid] || (cache[gid] = parse(spec, s, gid));
     let res; try { res = spec.process(D); } catch(e){ res = {table: '', result: `<div class="note">计算出错：${esc(e.message)}</div>`, issues: [], ai: [], ok: false}; }
+    if (/NaN|Infinity/.test(res.result)){ res.ok = false; res.issues.push('有的结果无法计算（出现了非有限值），多半是参数为 0 或数据重复，请检查'); }
     spec.groups.forEach(g => { const d = D(g.id);
       if (d.bad.length) res.issues.unshift(`${g.name}：第 ${d.bad.join('、')} 行有空白或不合法的数据，没有参与计算`);
       if (d.badPrm.length && d.rows.length) res.issues.unshift(`${g.name}：参数“${d.badPrm.map(p => p.label).join('、')}”没有填或格式不对`); });
@@ -668,9 +703,9 @@ const MyData = (() => {
     $('#' + P + '-params').innerHTML = g.params.map(p => `<label>${p.label}${p.unit ? `（${p.unit}）` : ''}<input data-p="${p.k}" value="${esc(prmVal(s, g, p))}" inputmode="decimal"></label>`).join('');
     let rows = rowsOf(s, g.id);
     if (!rows.length){ for (let i = 0; i < 3; i++) s.rows.push({g: g.id, v: g.cols.map(() => '')}); rows = rowsOf(s, g.id); }
-    const cell = (c, v, j) => c.kind === 'sel' ? `<select data-c="${j}">${c.opts.map(([val, t]) => `<option value="${val}"${val === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : `<input data-c="${j}" value="${esc(v ?? '')}"${c.kind === 'text' ? '' : ' inputmode="decimal"'} aria-label="${c.label.replace(/<[^>]+>/g, '')}">`;
+    const cell = (c, v, j, r) => c.kind === 'sel' ? `<select data-c="${j}"${exCell(r, j) ? ' class="ex"' : ''}>${c.opts.map(([val, t]) => `<option value="${val}"${val === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : `<input data-c="${j}"${exCell(r, j) ? ' class="ex" title="示例数据"' : ''} value="${esc(v ?? '')}"${c.kind === 'text' ? '' : ' inputmode="decimal"'} aria-label="${c.label.replace(/<[^>]+>/g, '')}">`;
     $('#' + P + '-grid').innerHTML = `<thead><tr><th>#</th>${g.cols.map(c => `<th>${c.label}${c.opt ? '<span class="optl">（可不填）</span>' : ''}</th>`).join('')}<th></th></tr></thead><tbody>` +
-      rows.map((r, i) => `<tr data-r="${i}"><td class="n">${i + 1}</td>${g.cols.map((c, j) => `<td>${cell(c, r.v[j], j)}</td>`).join('')}<td><button class="ud-del" data-act="del" title="删除这一行" aria-label="删除第 ${i + 1} 行">×</button></td></tr>`).join('') + '</tbody>';
+      rows.map((r, i) => `<tr data-r="${i}"><td class="n">${i + 1}</td>${g.cols.map((c, j) => `<td>${cell(c, r.v[j], j, r)}</td>`).join('')}<td><button class="ud-del" data-act="del" title="删除这一行" aria-label="删除第 ${i + 1} 行">×</button></td></tr>`).join('') + '</tbody>';
     markBad(spec);
   }
   /* 标出不合法的单元格（不重建表格，避免打断输入） */
@@ -688,13 +723,15 @@ const MyData = (() => {
 
   /* ---------- 左侧：结果、步骤 ---------- */
   function refresh(spec){
-    const s = S[spec.key], P = spec.P, res = compute(spec, s);
-    LabStore.save(P, s);
-    const exG = spec.groups.filter(g => s.ex[g.id] && rowsOf(s, g.id).some(r => r.v.some(v => String(v).trim())));
-    $('#databox-' + spec.key).dataset.source = exG.length ? 'example' : 'real';
-    if (exG.length) res.issues.unshift(`“${exG.map(g => g.name).join('、')}”中是程序生成的示例数据，不是你的实测数据，不能作为实验结果上交`);
-    $('#' + P + '-table').innerHTML = res.table || '<div class="empty">还没有数据。在右边录入实验课上记下的原始数据，结果会自动计算。</div>';
-    $('#' + P + '-result').innerHTML = res.result + (res.issues.length ? `<div class="note"><b>程序检查发现：</b>${res.issues.map(esc).join('；')}。</div>` : res.ok ? '<div class="hint">程序检查没有发现明显问题。</div>' : '');
+    const s = S[spec.key], P = spec.P, res = compute(spec, s), pv = provenance(spec, s);
+    saveS(P, s);
+    $('#databox-' + spec.key).dataset.source = pv.source;
+    pv.where.slice().reverse().forEach(w => res.issues.unshift(w.all ? `“${w.g.name}”中全部是程序生成的示例数据，不是你的实测数据，不能作为实验结果上交`
+      : `“${w.g.name}”第 ${w.no.join('、')} 行仍含程序生成的示例数据（灰色斜体的格子），整行改成自己的数据或删除后才算实测数据`));
+    $('#' + P + '-table').innerHTML = res.table || '<div class="empty">还没有数据。</div>';
+    const nRows = s.rows.filter(filled).length;
+    $('#' + P + '-rawsum').textContent = nRows ? `原始读数与中间量（${nRows} 行）` : '原始读数与中间量';
+    $('#' + P + '-result').innerHTML = (res.entered ? '' : '<div class="empty">还没有数据。在右边录入实验课上记下的原始数据，结果和数据检查会显示在这里。</div>') + res.result + (res.issues.length ? `<div class="note"><b>程序检查发现：</b>${res.issues.map(esc).join('；')}。</div>` : res.ok ? '<div class="hint">程序检查没有发现明显问题。</div>' : '');
     $('#' + P + '-result').querySelectorAll('canvas[data-plot]').forEach((cv, i) => res.charts?.[i]?.(cv));
     renderSteps(P, [
       [res.entered && res.prmOk, `<b>选择内容、核对参数</b>：右边选择要处理的实验内容（${spec.groups.map(g => g.name).join('、')}），按你的实验条件修改参数，如波长、仪器误差限。`],
@@ -706,26 +743,27 @@ const MyData = (() => {
 
   function mount(key, el){
     const spec = SPECS[key]; spec.key = key; const P = spec.P;
-    el.innerHTML = labShell(P, {title: spec.title, principle: spec.principle, right: entryHTML(spec), rightClass: 'card ud-card', recBar: false});
+    el.innerHTML = labShell(P, {title: spec.title, principle: spec.principle, right: entryHTML(spec), rightClass: 'card ud-card', recBar: false, resultFirst: true});
     const s = S[key] = blank(spec);
     LabStore.restore(P, s);
     if (!spec.groups.some(g => g.id === s.g)) s.g = spec.groups[0].id;
+    for (const gid in s.ex) if (s.ex[gid]) rowsOf(s, gid).forEach(r => { if (!r.x) r.x = r.v.map(() => 1); });   // 兼容 v1.8.0 的存档
+    s.ex = {};
     $('#' + P + '-review').innerHTML = paras(s.review || '');
     const ud = $('#' + P + '-ud');
     let timer = 0;
     const changed = (now) => { s.checked = false; s.review = ''; $('#' + P + '-review').innerHTML = ''; clearTimeout(timer); const run = () => { refresh(spec); markBad(spec); }; if (now) run(); else timer = setTimeout(run, 250); };
     ud.addEventListener('click', e => {
-      const tab = e.target.closest('[data-g]'); if (tab){ s.g = tab.dataset.g; drawEntry(spec); LabStore.save(P, s); return; }
+      const tab = e.target.closest('[data-g]'); if (tab){ s.g = tab.dataset.g; drawEntry(spec); saveS(P, s); return; }
       const b = e.target.closest('[data-act]'); if (!b) return;
       const g = grp(spec, s), rows = rowsOf(s, g.id);
       if (b.dataset.act === 'add'){ if (LabStore.full(P)) return; s.rows.push({g: g.id, v: g.cols.map(() => '')}); drawEntry(spec); ud.querySelector('tbody tr:last-child input')?.focus(); }
       if (b.dataset.act === 'del'){ const r = rows[+b.closest('tr').dataset.r]; s.rows.splice(s.rows.indexOf(r), 1); drawEntry(spec); changed(true); }
-      if (b.dataset.act === 'clear'){ if (rows.some(r => r.v.some(v => String(v).trim())) && !confirm(`清空“${g.name}”的全部数据？`)) return; s.rows = s.rows.filter(r => r.g !== g.id); delete s.ex[g.id]; drawEntry(spec); changed(true); }
+      if (b.dataset.act === 'clear'){ if (rows.some(r => r.v.some(v => String(v).trim())) && !confirm(`清空“${g.name}”的全部数据？`)) return; s.rows = s.rows.filter(r => r.g !== g.id); drawEntry(spec); changed(true); }
       if (b.dataset.act === 'example'){
         if (rows.some(r => r.v.some(v => String(v).trim())) && !confirm(`用示例数据替换“${g.name}”现有的数据？`)) return;
-        s.rows = s.rows.filter(r => r.g !== g.id).concat(g.example().map(v => ({g: g.id, v: v.map(String)})));
+        s.rows = s.rows.filter(r => r.g !== g.id).concat(g.example().map(v => ({g: g.id, v: v.map(String), x: v.map(() => 1)})));
         if (g.exParams){ s.prm[g.id] = {...(s.prm[g.id] || {}), ...g.exParams}; }
-        s.ex[g.id] = true;
         drawEntry(spec); changed(true);
         $('#' + P + '-save-status').textContent = '已填入示例数据（模拟生成，仅用于熟悉格式和流程）。';
       }
@@ -734,9 +772,9 @@ const MyData = (() => {
       const g = grp(spec, s);
       const pi = e.target.closest('input[data-p]'); if (pi){ (s.prm[g.id] = s.prm[g.id] || {})[pi.dataset.p] = pi.value; changed(); return; }
       const ci = e.target.closest('[data-c]'); if (!ci) return;
-      const r = rowsOf(s, g.id)[+ci.closest('tr').dataset.r]; r.v[+ci.dataset.c] = ci.value; changed();
+      const r = rowsOf(s, g.id)[+ci.closest('tr').dataset.r], j = +ci.dataset.c; r.v[j] = ci.value; if (r.x) r.x[j] = 0; ci.classList.remove('ex'); changed();
     });
-    ud.addEventListener('change', e => { if (e.target.matches('select[data-c]')){ const g = grp(spec, s), r = rowsOf(s, g.id)[+e.target.closest('tr').dataset.r]; r.v[+e.target.dataset.c] = e.target.value; changed(); } });
+    ud.addEventListener('change', e => { if (e.target.matches('select[data-c]')){ const g = grp(spec, s), r = rowsOf(s, g.id)[+e.target.closest('tr').dataset.r], j = +e.target.dataset.c; r.v[j] = e.target.value; if (r.x) r.x[j] = 0; e.target.classList.remove('ex'); changed(); } });
     ud.addEventListener('keydown', e => {
       const ci = e.target.closest('input[data-c]'); if (!ci || e.key !== 'Enter') return; e.preventDefault();
       const tr = ci.closest('tr'), j = ci.dataset.c, next = tr.nextElementSibling;
@@ -754,9 +792,8 @@ const MyData = (() => {
       const need = r0 + lines.length - rows.length;
       if (need > 0 && LabStore.full(P, need)) return;
       for (let k = 0; k < need; k++) s.rows.push({g: g.id, v: g.cols.map(() => '')});
-      delete s.ex[g.id];                              // 粘贴进来的是自己的数据
       rows = rowsOf(s, g.id);
-      lines.forEach((cells, i) => cells.forEach((t, j) => { if (c0 + j < g.cols.length) rows[r0 + i].v[c0 + j] = t.trim(); }));
+      lines.forEach((cells, i) => cells.forEach((t, j) => { const row = rows[r0 + i]; if (c0 + j < g.cols.length){ row.v[c0 + j] = t.trim(); if (row.x) row.x[c0 + j] = 0; } }));   // 粘贴进来的是自己的数据
       drawEntry(spec); changed(true);
       const wide = Math.max(...lines.map(l => l.length)), room = g.cols.length - c0;
       $('#' + P + '-save-status').textContent = `已粘贴 ${lines.length} 行。` + (wide > room ? `粘贴的数据有 ${wide} 列，从这一格往右只有 ${room} 列，多出的列没有填入，请确认选对了实验内容和起始单元格。` : '');
@@ -783,5 +820,5 @@ ${res.ai.join('\n')}
   }
 
   const KEYS = Object.keys(SPECS);
-  return {SPECS, KEYS, mount: (key, el) => mount(key, el), render: key => { const spec = SPECS[key]; if (S[key]) { refresh(spec); } }, parse, compute, num, ang, hyperFit, linfit, blank};
+  return {SPECS, KEYS, mount: (key, el) => mount(key, el), render: key => { const spec = SPECS[key]; if (S[key]) { refresh(spec); } }, parse, compute, num, ang, hyperFit, linfit, blank, provenance};
 })();

@@ -273,6 +273,21 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    [['0','32.41250'],['50','32.42832'],['100','32.44x14'],['150','32.45990'],['200','32.47580'],['250','32.49160'],['300','32.50742'],['350','32.52480'],['400','32.53900'],['450','32.53890']].forEach(v=>s.rows.push({g:'he',v}));
    const res=MD.compute(spec,s), all=res.issues.join('\n');
    assert(/第 3 行有空白或不合法/.test(all) && /反转过鼓轮/.test(all) && /可能数错了环/.test(all), all); }
+ // v1.8.1：信号无法分辨时不给结果
+ { const spec=MD.SPECS.polar, s=MD.blank(spec); for (let k=0;k<13;k++) s.rows.push({g:'malus',v:[String(k*15),'0']});
+   const res=MD.compute(spec,s); assert(!res.ok && /无法确定平行位置/.test(res.result) && !/final/.test(res.result) && res.issues.some(x=>/光强全部为零/.test(x))); }
+ { const spec=MD.SPECS.polar, s=MD.blank(spec); for (let k=0;k<13;k++) s.rows.push({g:'malus',v:[String(k*15),(500+0.3*Math.sin(k*7)).toFixed(2)]});
+   const res=MD.compute(spec,s); assert(!res.ok && /几乎不随检偏器角度变化/.test(res.result)); }
+ { const spec=MD.SPECS.laser, s=MD.blank(spec); [[20,10,6],[20,20,10.1],[20,30,13.9],[20,40,18]].forEach(v=>s.rows.push({g:'pi',v:v.map(String)}));
+   const res=MD.compute(spec,s); assert(!res.ok && res.issues.some(x=>/阈值电流/.test(x)), res.issues.join(';')); }
+ // v1.8.1：数据来源逐格记录，部分替换的示例数据要标为“混合”
+ { const spec=MD.SPECS.newton, s=MD.blank(spec), ex=spec.groups[0].example();
+   ex.forEach(v=>s.rows.push({g:'ring',v:v.map(String),x:v.map(()=>1)}));
+   assert.equal(MD.provenance(spec,s).source,'example');
+   s.rows[0].v[1]='24.000'; s.rows[0].x[1]=0; s.rows[0].v[2]='26.000'; s.rows[0].x[2]=0;
+   const pv=MD.provenance(spec,s); assert.equal(pv.source,'mixed'); assert.deepEqual([...pv.where[0].no],[1,2,3,4,5,6,7,8,9,10]);
+   s.rows[0].x[0]=0; assert.deepEqual([...MD.provenance(spec,s).where[0].no],[2,3,4,5,6,7,8,9,10]);
+   s.rows.forEach(r=>r.x=r.v.map(()=>0)); assert.equal(MD.provenance(spec,s).source,'real'); }
  // 位置太集中的光束数据不能给出可信的 M²
  { const h=MD.hyperFit([115,120,125,130,135],[0.4321,0.4330,0.4336,0.4347,0.4352],632.8e-6); assert(h.invalid || !h.reliable); }
  console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all eight experiments).');

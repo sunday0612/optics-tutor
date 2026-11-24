@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.8.1';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -88,6 +88,7 @@ aiDetect();
 // Store experiments on disk through the backend: desktop ports change between launches.
 const LabStore = {
   data:{}, queue:Promise.resolve(), failed:false,
+  sent:{},                                   // 每个实验最近一次保存（或读入）的内容，没有变化就不重复保存
   /* 每个实验最多保存的记录条数（与 server.py 的 LAB_ROW_LIMIT 一致） */
   limit:p=>({bm:1500})[p]||500,
   live:{},
@@ -107,17 +108,21 @@ const LabStore = {
     if(saved && Array.isArray(saved.rows) && saved.rows.length<=this.limit(p)){
       const keys=Object.keys(s);
       if(keys.every(k=>k in saved && (typeof s[k]!=='number' || Number.isFinite(saved[k])))) {
-        for(const k of keys) s[k]=saved[k];
+        const copy=JSON.parse(JSON.stringify(saved));      // 复制一份：之后修改 s 不会改到“已保存”的记录
+        for(const k of keys) s[k]=copy[k];
         s.review=typeof saved.review==='string'?saved.review:'';
+        this.sent[p]=JSON.stringify(s);
         return saved;
       }
     }
+    this.sent[p]=JSON.stringify(s);   // 没有存档：初始状态不必立刻保存，有了变化再存
   },
   save(p,s){
     this.live[p]=s; $('#'+p+'-save-status')?.classList.remove('warn-text');
     if(!AI.backend || this.failed) return;
     if(s.rows.length>this.limit(p)){ $('#'+p+'-save-status').textContent=`记录已超过上限 ${this.limit(p)} 条，超出的部分无法保存，请撤销或删除一部分数据`; return; }
-    const state=JSON.parse(JSON.stringify(s)); this.data[p]=state;
+    const json=JSON.stringify(s); if(json===this.sent[p]) return;   // 内容没变，不发请求
+    this.sent[p]=json; const state=JSON.parse(json); this.data[p]=state;
     this.queue=this.queue.then(async()=>{
       // keepalive 让关窗时的最后一次保存也能发出；Chrome 限制未读完的 keepalive 响应共 64 KB，所以每次都要读完响应
       const body=JSON.stringify({lab:p,state});
@@ -125,7 +130,7 @@ const LabStore = {
       await r.text();
       if(!r.ok) throw Error('保存失败');
       $('#'+p+'-save-status').textContent='实验已保存到本机';
-    }).catch(()=>{ $('#'+p+'-save-status').textContent='保存失败，请保持软件打开并再次记录或批改以重试'; });
+    }).catch(()=>{ if(this.sent[p]===json) this.sent[p]=null; $('#'+p+'-save-status').textContent='保存失败，请保持软件打开并再次记录或批改以重试'; });
   }
 };
 /* 所有实验的“记录读数”按钮：满额时拦下点击并提示 */
@@ -154,7 +159,8 @@ function aiErrorNote(e){
 
 /* ---------------- 虚拟实验通用部件 ---------------- */
 /* 实验页面骨架：左边是步骤 / 数据 / 批改，右边是仪器 */
-function labShell(p, {title, principle, right, rightClass='card scope', recBar=true}){
+function labShell(p, {title, principle, right, rightClass='card scope', recBar=true, resultFirst=false}){
+  const table=`<div id="${p}-table"></div>`, result=`<div id="${p}-result"></div>`;
   return `<section>
     <div class="card">
       <h2 class="lab-title" data-title="${title}"><span class="n">实验</span>${title}<span class="prog" id="${p}-prog"></span></h2>
@@ -162,15 +168,14 @@ function labShell(p, {title, principle, right, rightClass='card scope', recBar=t
       <details class="principle"><summary>实验原理</summary>${principle}</details>
     </div>
     <div class="card data-card">
-      <h2><span class="n">记录</span>数据记录</h2>
+      <h2><span class="n">记录</span>${resultFirst?'结果与检查':'数据记录'}</h2>
       <div class="row rec-bar" style="margin-top:0;flex-wrap:wrap"${recBar?'':' hidden'}>
         <button class="primary" id="${p}-rec">记录读数</button>
         <button class="ghost" id="${p}-undo">撤销</button>
         <button class="ghost" id="${p}-clr">清空</button>
       </div>
       <div id="${p}-save-status" class="hint" role="status"></div>
-      <div id="${p}-table"></div>
-      <div id="${p}-result"></div>
+      ${resultFirst?`${result}<details class="rawdata"><summary id="${p}-rawsum">原始读数与中间量</summary>${table}</details>`:table+result}
     </div>
     <div class="card minor-card">
       <h2><span class="n">批改</span>AI 助教检查数据</h2>

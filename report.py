@@ -130,7 +130,8 @@ def _meta(rep):
 
 
 def footer(rep):
-    src = {"real": "数据为学生在实验中实测并录入", "example": "含程序生成的示例数据，不是实测数据"}.get(rep.get("source"), "数据来自虚拟实验")
+    src = {"real": "数据为学生在实验中实测并录入", "example": "数据为程序生成的示例数据，不是实测数据",
+           "mixed": "数据中含有程序生成的示例数据（见“程序检查发现”），不全是实测数据"}.get(rep.get("source"), "数据来自虚拟实验")
     return "由光影助教 v%s 生成。%s，AI 评语仅供参考。" % (rep.get("version", ""), src)
 
 

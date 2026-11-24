@@ -8,8 +8,9 @@ let curLab = 'michelson', curData = 'michelson';
 function route(){
   const h = location.hash.slice(1);
   const v = h.startsWith('lab') ? 'lab' : h.startsWith('data') ? 'data' : 'sim';
-  if (v==='lab'){ const k=h.split('-')[1]; if (LABS[k]) curLab=k; }
-  if (v==='data'){ const k=h.split('-')[1]; if (MyData.SPECS[k]) curData=k; }
+  /* 虚拟实验与实测数据两边停在同一个实验上：切换时不用重新选标签 */
+  if (v==='lab'){ const k=h.split('-')[1]; if (LABS[k]) curLab=k; if (MyData.SPECS[curLab]) curData=curLab; }
+  if (v==='data'){ const k=h.split('-')[1]; if (MyData.SPECS[k]) curData=k; if (LABS[curData]) curLab=curData; }
   $('#view-sim').hidden = v!=='sim';
   $('#view-lab').hidden = v!=='lab';
   $('#view-data').hidden = v!=='data';
