@@ -84,6 +84,7 @@
     <button class="labtab" data-lab="laser">半导体激光器特性</button>
     <button class="labtab" data-lab="beam">光束半径与 M²</button>
     <button class="labtab" data-lab="lens">光具座测焦距</button>
+    <button class="labtab" data-lab="telescope">望远镜放大率与视场</button>
   </div>
   <div class="labwrap" id="labbox-michelson"></div>
   <div class="labwrap" id="labbox-newton" hidden></div>
@@ -93,6 +94,7 @@
   <div class="labwrap" id="labbox-laser" hidden></div>
   <div class="labwrap" id="labbox-beam" hidden></div>
   <div class="labwrap" id="labbox-lens" hidden></div>
+  <div class="labwrap" id="labbox-telescope" hidden></div>
 </main>
 
 <main id="view-data" hidden>
@@ -106,6 +108,7 @@
     <button class="labtab datatab" data-data="laser">半导体激光器特性</button>
     <button class="labtab datatab" data-data="beam">光束半径与 M²</button>
     <button class="labtab datatab" data-data="lens">光具座测焦距</button>
+    <button class="labtab datatab" data-data="telescope">望远镜放大率与视场</button>
   </div>
   <div class="labwrap" id="databox-michelson"></div>
   <div class="labwrap" id="databox-newton" hidden></div>
@@ -115,6 +118,7 @@
   <div class="labwrap" id="databox-laser" hidden></div>
   <div class="labwrap" id="databox-beam" hidden></div>
   <div class="labwrap" id="databox-lens" hidden></div>
+  <div class="labwrap" id="databox-telescope" hidden></div>
 </main>
 
 <footer>
@@ -149,7 +153,7 @@
   </div>
 </div>
 
-<!-- 按顺序加载：公共工具 → 现象仿真 → 八个虚拟实验 → 设置 → 页面路由 -->
+<!-- 按顺序加载：公共工具 → 现象仿真 → 九个虚拟实验 → 设置 → 页面路由 -->
 <script src="js/core.js"></script>
 <script src="js/uncertainty.js"></script>
 <script src="js/mini3d.js"></script>
@@ -163,6 +167,7 @@
 <script src="js/lab-laser.js"></script>
 <script src="js/lab-beam.js"></script>
 <script src="js/lab-lens.js"></script>
+<script src="js/lab-telescope.js"></script>
 <script src="js/mydata.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/app.js"></script>

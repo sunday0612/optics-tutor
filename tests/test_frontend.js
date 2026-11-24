@@ -18,14 +18,15 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD'],['beam','BM'],['lens','LN']]){
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD'],['beam','BM'],['lens','LN'],['telescope','TS']]){
   const internals={
    PL:'validExtinction,checkPlate,intensity',
    NR:'review,setRetake(levels){retake=levels},wedgeCalc,nx:()=>NX',
    MI:'naCalc,setNa(r){X.na=r},PERIOD',
    SP:'misread',
    BM:'erfFit,hyper,beam,wAt',
-   LN:'sharpPos',
+   LN:'sharpPos,trace',
+   TS:'sp,Gp,Gc,Dp,lp,halfW,center',
   };
   const exports=`return {s,init,calc${internals[n]?','+internals[n]:''}};`;
   vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};',exports),labs);
@@ -256,6 +257,19 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    {t:'a',x:100+180-2,rev:false,off:0},{t:'a',x:100+180+2,rev:true,off:0}]; }`,labs);
  const lc=vm.runInContext('LN.calc()',labs);
  assert(Math.abs(lc.bessel.mean-180)<1e-9 && Math.abs(lc.auto.f1-178)<1e-9 && Math.abs(lc.auto.mean-180)<1e-9 && Math.abs(lc.auto.delta-2)<1e-9);
+ // ---------- v1.9.0：望远镜（有限远标尺的修正）与光具座光路追迹 ----------
+ { vm.runInContext(`TS.init(); TS.s.t=TS.sp(); TS.s.rows=[{t:'c',ep:'A',K:1,N:TS.Gc(),tl:TS.s.t},{t:'c',ep:'A',K:1,N:TS.Gc(),tl:TS.s.t},{t:'p',ep:'A',d:TS.Dp(),z:TS.lp(),dz:0},{t:'f',ep:'A',x1:TS.s.c-TS.halfW(),x2:TS.s.c+TS.halfW()}]`,labs);
+   const c=vm.runInContext('TS.calc().A',labs), s=vm.runInContext('TS.s',labs), G=s.fo/s.feA;
+   assert(Math.abs(c.cmp.inf-G)/G<0.005 && Math.abs(c.pup.inf-G)/G<0.005, `telescope corrections ${c.cmp.inf} ${c.pup.inf} ${G}`);
+   assert(c.pup.sum.mean>G*1.04 && c.cmp.sum.mean>c.pup.sum.mean, 'finite target enlarges measured magnification');
+   const sp=vm.runInContext('TS.sp()',labs); assert(Math.abs(c.fov.sum.mean-2*Math.atan(5/sp)*180/Math.PI)<1e-9); }
+ { // 自准法：物恰在焦面上时，回程光线回到物平面上同一点（倒像）
+   vm.runInContext(`LN.init(); LN.s.mode='auto'; LN.s.xl=100+LN.s.f-LN.s.dl;`,labs);
+   const back=vm.runInContext(`LN.trace().filter(r=>r.kind==='back').map(r=>r.pts[2][1])`,labs);
+   assert(Math.max(...back)-Math.min(...back)<1e-9 && Math.abs(back[0]+5)<1e-9, 'autocollimation returns to an inverted point');
+   vm.runInContext(`LN.s.mode='bessel'; LN.s.xs=900; LN.s.xl=LN.sharpPos()[0];`,labs);
+   const ends=vm.runInContext(`LN.trace().filter(r=>r.kind==='fwd').map(r=>r.pts[2][1])`,labs);
+   assert(Math.max(...ends.map(Math.abs))<1e-6, 'sharp Bessel position focuses on the screen'); }
  // ---------- v1.8.0：处理我的数据 ----------
  Object.assign(labs,{esc:s=>String(s),dms:d=>{d=((d%360)+360)%360;let a=Math.floor(d),m=Math.round((d-a)*60);if(m===60){a=(a+1)%360;m=0;}return `${a}°${String(m).padStart(2,'0')}′`;}});
  vm.runInContext(fs.readFileSync('web/js/mydata.js','utf8'),labs);
@@ -263,7 +277,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal(MD.num(' 3.5 '),3.5); assert.equal(MD.num(''),null); assert(Number.isNaN(MD.num('3.5a'))); assert.equal(MD.num('－２'),-2);
  assert(Math.abs(MD.ang('164°31′')-(164+31/60))<1e-12 && Math.abs(MD.ang('164 31')-(164+31/60))<1e-12 && MD.ang('164.5')===164.5 && Number.isNaN(MD.ang('164°61′')));
  const fullExample=key=>{ const spec=MD.SPECS[key], s=MD.blank(spec); spec.groups.forEach(g=>{ g.example().forEach(v=>s.rows.push({g:g.id,v:v.map(String)})); if (g.exParams) s.prm[g.id]={...g.exParams}; }); return MD.compute(spec,s); };
- const expect={michelson:/λ = \(63[23]\.\d ± /, newton:/R = \(1\.0[456]\d ± /, grating:/d = \(166[67]\.\d ± /, fiber:/θ = \(77\.\d ± /, polar:/θ<sub>∥<\/sub> = \(23\.\d+ ± /, laser:/R = \(0\.42\d ± /, beam:/M² = \(1\.1[0-9]\d ± /, lens:/f = \(16[45]\.\d+ ± /};
+ const expect={michelson:/λ = \(63[23]\.\d ± /, newton:/R = \(1\.0[456]\d ± /, grating:/d = \(166[67]\.\d ± /, fiber:/θ = \(77\.\d ± /, polar:/θ<sub>∥<\/sub> = \(23\.\d+ ± /, laser:/R = \(0\.42\d ± /, beam:/M² = \(1\.1[0-9]\d ± /, lens:/f = \(16[45]\.\d+ ± /, telescope:/Γ比 = \(13\.\d+ ± /};
  for (const key of MD.KEYS){ const res=fullExample(key);
    assert(res.ok && res.entered && res.prmOk, key+' example should compute');
    assert.deepEqual(res.issues,[], key+' example has issues: '+res.issues.join('；'));
@@ -290,5 +304,5 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    s.rows.forEach(r=>r.x=r.v.map(()=>0)); assert.equal(MD.provenance(spec,s).source,'real'); }
  // 位置太集中的光束数据不能给出可信的 M²
  { const h=MD.hyperFit([115,120,125,130,135],[0.4321,0.4330,0.4336,0.4347,0.4352],632.8e-6); assert(h.invalid || !h.reliable); }
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all eight experiments).');
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all nine experiments, telescope finite-distance corrections, lens ray tracing).');
 })().catch(e=>{console.error(e);process.exitCode=1});

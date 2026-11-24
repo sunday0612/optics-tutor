@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.9.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -233,11 +233,11 @@ document.addEventListener('click',e=>{ const li=e.target.closest('.steps li[data
   set.has(i)?set.delete(i):set.add(i); li.classList.toggle('open'); li.setAttribute('aria-expanded',set.has(i)); });
 document.addEventListener('keydown',e=>{ if ((e.key==='Enter'||e.key===' ')&&e.target.matches?.('.steps li[role=button]')){ e.preventDefault(); e.target.click(); } });
 /* 装置区：“三维模型 / 示意图”切换。build(viewer, getState) 返回 update() */
-function benchArea(P, build, getState, {cap3d='三维模型'}={}){
+function benchArea(P, build, getState, {cap3d='三维模型', ray=null}={}){   // ray：{cap} 时多一个“光路图”视图，由实验自己绘制
   const canvas=$('#'+P+'-bench'), wrap=canvas.parentElement, cap=wrap.querySelector('.caption'), cap2d=cap.textContent;
   wrap.classList.add('bench');
   wrap.insertAdjacentHTML('beforeend', `<div class="v3d" id="${P}-3d"></div>
-    <div class="viewseg"><button data-v="3d">三维模型</button><button data-v="2d">示意图</button></div>
+    <div class="viewseg"><button data-v="3d">三维模型</button><button data-v="2d">示意图</button>${ray?'<button data-v="ray">光路图</button>':''}</div>
     <div class="v3d-tools"><button data-a="auto">自动旋转</button><button data-a="labels">标注</button><button data-a="reset">复位视角</button><button data-a="full">放大</button></div>
     <div class="v3d-hint">拖动旋转，滚轮缩放，右键拖动平移，双击复位</div>`);
   const box3d=$('#'+P+'-3d'), tools=wrap.querySelector('.v3d-tools'), hint=wrap.querySelector('.v3d-hint');
@@ -245,8 +245,8 @@ function benchArea(P, build, getState, {cap3d='三维模型'}={}){
   function sync(){
     const is3=mode==='3d'&&!failed, full=wrap.classList.contains('full');
     canvas.hidden=is3; box3d.hidden=!is3; tools.hidden=!is3; hint.hidden=!is3;
-    wrap.querySelectorAll('.viewseg button').forEach(b=>b.classList.toggle('on', b.dataset.v===(is3?'3d':'2d')));
-    cap.textContent = failed ? cap2d+'（这台电脑不支持三维显示）' : is3 ? cap3d : cap2d;
+    wrap.querySelectorAll('.viewseg button').forEach(b=>b.classList.toggle('on', b.dataset.v===(is3?'3d':mode==='ray'?'ray':'2d')));
+    cap.textContent = mode==='ray' ? ray.cap : failed ? cap2d+'（这台电脑不支持三维显示）' : is3 ? cap3d : cap2d;
     if (viewer){ tools.querySelector('[data-a=auto]').classList.toggle('on',viewer.auto); tools.querySelector('[data-a=labels]').classList.toggle('on',viewer.showLabels); }
     tools.querySelector('[data-a=full]').textContent = full ? '还原' : '放大';
   }
@@ -257,7 +257,7 @@ function benchArea(P, build, getState, {cap3d='三维模型'}={}){
     sync();
   }
   wrap.querySelector('.viewseg').addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b) return;
-    mode=b.dataset.v; if (mode==='2d') wrap.classList.remove('full'); sync(); onChange(); });
+    mode=b.dataset.v; if (mode!=='3d') wrap.classList.remove('full'); sync(); onChange(); });
   tools.addEventListener('click',e=>{ const b=e.target.closest('button'); if (!b||!viewer) return; const a=b.dataset.a;
     if (a==='auto') viewer.auto=!viewer.auto;
     if (a==='labels') viewer.showLabels=!viewer.showLabels;
@@ -268,6 +268,7 @@ function benchArea(P, build, getState, {cap3d='三维模型'}={}){
   sync();
   return {
     is3d:()=>mode==='3d'&&!failed,
+    isRay:()=>mode==='ray',
     update(){ ensure(); if (failed) return false; update(); viewer.dirty=true; return true; },
     set onChange(f){ onChange=f; },
   };

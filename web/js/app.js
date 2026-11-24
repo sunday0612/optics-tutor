@@ -2,7 +2,7 @@
  * app.js —— 页面路由与启动：#sim 现象仿真；#lab-michelson / #lab-newton / #lab-grating / #lab-fiber / #lab-polar / #lab-laser / #lab-beam / #lab-lens 虚拟实验；
  *           #data-michelson 等：处理我的数据（真实实验数据）
  * ===================================================================== */
-const LABS = {michelson:MI, newton:NR, grating:SP, fiber:FB, polar:PL, laser:LD, beam:BM, lens:LN};
+const LABS = {michelson:MI, newton:NR, grating:SP, fiber:FB, polar:PL, laser:LD, beam:BM, lens:LN, telescope:TS};
 let curLab = 'michelson', curData = 'michelson';
 
 function route(){

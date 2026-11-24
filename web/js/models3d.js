@@ -1,6 +1,6 @@
 /* =====================================================================
- * models3d.js —— 八个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
- *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）、半导体激光器与光电二极管、刀口法测光束、光具座测焦距
+ * models3d.js —— 九个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
+ *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）、望远镜、半导体激光器与光电二极管、刀口法测光束、光具座测焦距
  * 每个模型返回 update()，在实验状态变化时调用：部件会跟着操作移动或转动。
  * 观察者默认站在 −z 一侧（“前方”）。
  * ===================================================================== */
@@ -594,16 +594,67 @@ const Models3D = (() => {
     const mirror=new Node(); mirror.add(boxN(0.4,4.6,4.6,mat({color:'#dfe3ea',spec:1,shin:160}),1.4,Y,0)); ls.add(mirror); R.add(ls);
     const scr=slider(0); scr.add(boxN(0.25,7,7,mat({color:'#ece9e2',spec:0.1}),0,Y,0)); const spot=N(disc(1,0,32),glow('#ffd88a',0.8)).rotate(0,0,PI/2); scr.add(spot); R.add(scr);
     const b1=beam(mat({color:'#ffe2a0',unlit:true,opacity:0.18,additive:true}),0.9), b2=beam(mat({color:'#ffe2a0',unlit:true,opacity:0.18,additive:true}),0.9); R.add(b1,b2);
+    /* 光线：与“光路图”同一组近轴追迹结果，竖直方向放大显示；去程暖色、回程冷色 */
+    const rayFwd=mat({color:'#ffd27a',unlit:true,opacity:0.85,additive:true}), rayBack=mat({color:'#7cc8ff',unlit:true,opacity:0.85,additive:true});
+    const pool=[...Array(40)].map(()=>{ const n=N(unitCyl,rayFwd); n.r=0.05; n.visible=false; R.add(n); return n; });
     const L=(t,n,o)=>v.label(t,n,o);
     L('光源与物',src.children[2],[0,4,0]); L('凸透镜',lensN,[0,3,0]); L('像屏',scr.children[2],[0,4.6,0]); L('平面镜',mirror.children[0],[0,-3.4,0]);
     return function update(){
       const s=S(), xl=X(s.xl), auto=s.mode==='auto';
       ls.pos=[xl,0,0]; lensN.pos=[0,Y+s.ey*0.35,s.ex*0.35]; lensN.rot=[0,0,-PI/2]; mirror.visible=auto;
       scr.visible=!auto; scr.pos=[X(s.xs),0,0]; spot.pos=[-0.14,Y,0];
-      setBeam(b1,[X(s.XO)-0.8,Y,0],[xl,Y,0]); b2.visible=!auto; if (!auto) setBeam(b2,[xl,Y,0],[X(s.xs)-0.2,Y,0]);
+      b1.visible=b2.visible=false;                    // 用光线代替原来的光束示意
+      const KY=0.2; let k=0;
+      for (const r of s.rays||[]) for (let i=0;i+1<r.pts.length&&k<pool.length;i++,k++){ const [a,b]=[r.pts[i],r.pts[i+1]], n=pool[k];
+        n.mat=r.kind==='back'?rayBack:rayFwd; n.r=r.kind==='tip'?0.03:0.05;
+        setSeg(n,[X(a[0]),Y+a[1]*KY,r.kind==='back'?0.15:0],[X(b[0]),Y+b[1]*KY,r.kind==='back'?0.15:0]); }
+      for (;k<pool.length;k++) pool[k].visible=false;
     };
   }
   lensLab.camera={target:[0,7,-2], dist:130, theta:1.3, phi:1.0, minDist:20, maxDist:280};
 
-  return {michelson, newton, spectrometer, fiber, polarization, laser, beam:beamLab, lens:lensLab};
+  /* ---------- 望远镜（开普勒式，物镜 f₀ ≈ 300 mm，带分划板和可换目镜）：按 1:1 的厘米尺寸 ---------- */
+  function telescopeLab(v, S){
+    const R=v.root, Y=21, X0=-14;                       // 物镜在 x = X0，镜筒向 +x，眼睛在 +x 一侧
+    table(R, 130, 50);
+    R.add(shadow(16,12,X0+15,0), shadow(4,24,-55,0));
+    /* 支架：底座、立柱、叉架 */
+    R.add(boxN(16,1.6,12,MAT.cast,X0+15,0.8,0), cylY(1.1,Y-5,MAT.castHi,X0+15,(Y-5)/2+1.6,0), boxN(5,2.2,5.4,MAT.cast,X0+15,Y-3.4,0));
+    /* 镜筒与物镜 */
+    R.add(cylX(2.4,27,mat({color:'#e9e7e1',spec:0.4,shin:30}),X0+13.5,Y,0), cylX(2.9,3,MAT.anod,X0+0.5,Y,0), cylX(2.5,1.2,MAT.anod,X0+27.4,Y,0));
+    const obj=alongX(N(lensGeo(),glassM())); obj.pos=[X0-0.6,Y,0]; obj.scl=[1.15,1,1.15]; R.add(obj);
+    const fk=knob(v,1.1,1.4); fk.rot=[PI/2,0,0]; fk.pos=[X0+22,Y-1.6,3]; R.add(fk);
+    /* 调焦筒（带分划板）和目镜：随调焦读数、目镜种类移动 */
+    const draw=new Node(), ret=N(disc(1.35,0,32),mat({color:'#cfe2fa',spec:1,shin:140,opacity:0.5})).rotate(0,0,PI/2);
+    draw.add(cylX(1.75,9,MAT.chrome,-4.5,0,0), ret);
+    const epA=new Node(), epB=new Node();
+    epA.add(cylX(1.5,2.6,MAT.anod,1.3,0,0), cylX(1.75,0.8,mat({color:'#2a2a2e',spec:0.2}),2.4,0,0), alongX(N(lensGeo(),glassM())).at(2.6,0,0).scale(0.55,0.4,0.55));
+    epB.add(cylX(1.5,4.2,MAT.anod,2.1,0,0), cylX(1.75,0.8,mat({color:'#2a2a2e',spec:0.2}),4,0,0), alongX(N(lensGeo(),glassM())).at(4.2,0,0).scale(0.6,0.4,0.6));
+    const ring=N(torus(1.62,0.22,40,8),MAT.knob).rotate(0,0,PI/2); ring.pos=[0.4,0,0];
+    draw.add(epA, epB, ring); R.add(draw);
+    /* 远处的标尺（实际在 5 m 外）与毛玻璃灯箱 */
+    const rul=new Node(); rul.pos=[-56,0,0];
+    rul.add(cylY(0.5,Y-6,MAT.steel,0,(Y-6)/2+0.5,0), boxN(4,1,4,MAT.cast,0,0.5,0), boxN(0.3,7,34,mat({color:'#f1efe8',spec:0.2}),0,Y,0));
+    for (let k=0;k<8;k++) if (k%2===0) rul.add(boxN(0.34,3.2,4,mat({color:'#1b1c1f',spec:0.1}),0.02,Y+1.4,-16+k*4+2));
+    for (let k=0;k<=32;k++) rul.add(boxN(0.34,k%10===0?1.6:k%5===0?1.1:0.6,0.1,mat({color:'#1b1c1f'}),0.02,Y-1.2+(k%10===0?-0.5:k%5===0?-0.25:0),-16+k));
+    R.add(rul);
+    const box=new Node(); box.pos=[X0-9,0,0];
+    box.add(boxN(3,8,9,mat({color:'#3a3f46',spec:0.3}),-1.5,Y,0), N(plane(7.6,7),glow('#fff6dc',0.95)).at(0.02,Y,0).rotate(0,0,-PI/2), cylY(0.5,Y-4,MAT.steel,-1.5,(Y-4)/2,0), boxN(4,1,5,MAT.cast,-1.5,0.5,0));
+    R.add(box);
+    /* 出瞳法用的白屏与光斑 */
+    const scr=new Node(), spot=N(disc(1,0,32),glow('#ffe7a8',0.95)).rotate(0,0,PI/2);
+    scr.add(boxN(0.2,6,6,mat({color:'#f2f1ec',spec:0.1}),0,Y,0), cylY(0.4,Y-3.5,MAT.steel,0.3,(Y-3.5)/2+1.2,0), boxN(3,1,4,MAT.cast,0.3,1.7,0), spot);
+    R.add(scr);
+    const L=(t,n,o)=>v.label(t,n,o);
+    L('物镜',obj,[0,3.6,0]); L('调焦手轮',fk,[0,-2.4,0]); L('目镜（视度圈）',ring,[0,2.8,0]); L('标尺（实际在 5 m 外）',rul.children[2],[0,4.6,0]); L('毛玻璃灯箱',box.children[1],[0,5,0]); L('白屏',scr.children[0],[0,4,0]);
+    return function update(){
+      const s=S(), xr=X0+s.t/10, pupil=s.mode==='pupil', len=s.ep==='A'?2.6:4.2;
+      draw.pos=[xr,Y,0]; ret.pos=[0,0,0]; epA.visible=s.ep==='A'; epB.visible=s.ep==='B'; ring.pos=[s.ep==='A'?0.4:0.6,0,0];
+      box.visible=pupil; scr.visible=pupil; rul.visible=!pupil;
+      scr.pos=[xr+len+0.4+s.z/10,0,0]; spot.pos=[-0.12,Y,0]; spot.scl=[0.35,1,0.35];
+    };
+  }
+  telescopeLab.camera={target:[-8,16,0], dist:110, theta:1.25, phi:1.05, minDist:20, maxDist:260};
+
+  return {michelson, newton, spectrometer, fiber, polarization, laser, beam:beamLab, lens:lensLab, telescope:telescopeLab};
 })();

@@ -3,6 +3,7 @@
  * 操作：大像追小像调共轴 → 固定物屏距离 D，移动透镜找两次清晰像，f = (D² − d²)/(4D)，换几个 D
  *       → 自准法：平面镜放在透镜后，物屏上成清晰的倒像时透镜到物的距离就是 f；透镜转 180° 再测一次
  * 物理模型：薄透镜；透镜架的读数指标与透镜主面相差 δ（转 180° 后变号）；离焦时像按弥散圆模糊
+ * 光路图：近轴光线追迹，二维“光路图”视图与三维模型共用同一组光线
  * ===================================================================== */
 const LN = (() => {
   const P='ln', XO=100, AP=18, INST=0.5;                // 物的位置 (mm)、透镜有效口径 (mm)、导轨刻度的仪器误差限 (mm)
@@ -24,6 +25,25 @@ const LN = (() => {
   }
   /* 自准法：物经透镜、平面镜、透镜回到物平面，物恰在焦面上时像最清晰 */
   const autoBlur=()=>2*AP*Math.abs(pp()-XO-s.f)/s.f;
+  /* ---------- 近轴光线追迹 ----------
+   * 返回折线（坐标 mm：x 沿导轨，y 为离光轴的高度），kind：fwd 去程，back 自准法的回程，tip 物顶点发出的特征光线
+   * 成像：物点 → 透镜（θ′ = θ − y/f）→ 屏；自准法：物点 → 透镜 → 平面镜（反射）→ 透镜 → 回到物平面 */
+  const MIR=20, H0=5;                                  // 平面镜在透镜后 20 mm；画图用的物高 5 mm
+  function trace(){
+    const P0=pp(), f=s.f, u=P0-XO, out=[];
+    if (s.mode==='auto'){
+      for (const k of [0.9,0.45,0,-0.45,-0.9]){ const yl=k*AP/2, t0=(yl-H0)/u, t1=t0-yl/f, M=P0+MIR, ym=yl+t1*MIR;
+        out.push({kind:'fwd', pts:[[XO,H0],[P0,yl],[M,ym]]});
+        const yl2=ym+t1*MIR, a=t1-yl2/f; out.push({kind:'back', pts:[[M,ym],[P0,yl2],[XO,yl2+a*u]]}); }
+      return out;
+    }
+    const xEnd=s.xs;
+    for (const k of [0.9,0.45,-0.45,-0.9]){ const yl=k*AP/2, t1=yl/u-yl/f; out.push({kind:'fwd', pts:[[XO,0],[P0,yl],[xEnd,yl+t1*(xEnd-P0)]]}); }
+    /* 物顶点：平行光线、过光心的光线（只画到屏） */
+    const t1=-H0/f; out.push({kind:'tip', pts:[[XO,H0],[P0,H0],[xEnd,H0+t1*(xEnd-P0)]]});
+    out.push({kind:'tip', pts:[[XO,H0],[xEnd,H0-H0/u*(xEnd-XO)]]});
+    return out;
+  }
   /* 二次成像法两个清晰位置（读数）：理论值 */
   function sharpPos(xs=s.xs){ const D=xs-XO, q=D*D-4*D*s.f; if (q<=0) return null; const r=Math.sqrt(q); const off=s.rev?-s.dl:s.dl;
     return [XO+(D-r)/2-off, XO+(D+r)/2-off]; }
@@ -52,7 +72,7 @@ const LN = (() => {
         </div>
       </div>`});
     init(); LabStore.restore(P,s); stats.records+=s.rows.length; $('#'+P+'-review').innerHTML=paras(s.review||'');
-    B=benchArea(P, Models3D.lens, ()=>({xl:s.xl, xs:s.xs, mode:s.mode, rev:s.rev, XO, ex:s.ex, ey:s.ey}), {cap3d:'三维模型'});
+    B=benchArea(P, Models3D.lens, ()=>({xl:s.xl, xs:s.xs, mode:s.mode, rev:s.rev, XO, ex:s.ex, ey:s.ey, rays:trace()}), {cap3d:'三维模型（光线高度放大显示）', ray:{cap:'光路图（竖直方向放大；随透镜滑座实时变化）'}});
     B.onChange=render;
     $('#'+P+'-modes').onclick=e=>{ const b=e.target.closest('button'); if (b){ s.mode=b.dataset.v; render(); } };
     for (const k of ['ex','ey']){ $('#'+P+'-'+k).value=s[k]; $('#'+P+'-'+k).addEventListener('input',e=>{ s[k]=+e.target.value; if (Math.abs(s.ex)<0.15&&Math.abs(s.ey)<0.15) s.coax=true; render(); }); }
@@ -71,10 +91,11 @@ const LN = (() => {
 
   /* ---------- 绘图 ---------- */
   function render(){
-    if (!(B.is3d() && B.update())) bench();
-    view();
+    /* 先切换面板上的控件，再按新的布局绘图 */
     document.querySelectorAll('#'+P+'-modes .tab').forEach(b=>b.classList.toggle('active',b.dataset.v===s.mode));
     document.querySelectorAll('#'+P+'-panel [data-m]').forEach(el=>{ el.hidden=!el.dataset.m.split(' ').includes(s.mode); });
+    if (B.isRay()) rays(); else if (!(B.is3d() && B.update())) bench();
+    view();
     $('#'+P+'-oey').textContent=s.ey.toFixed(2); $('#'+P+'-oex').textContent=s.ex.toFixed(2); $('#'+P+'-oxs').textContent=s.xs.toFixed(0)+' mm';
     $('#'+P+'-fliptip').textContent=s.rev?'（现在是反向放置）':'（现在是正向放置）';
     $('#'+P+'-readout').innerHTML=`<div>滑座读数</div><div class="v">透镜 ${s.xl.toFixed(1)} mm</div><div class="f">物 ${XO} mm${s.mode==='auto'?'　平面镜紧贴透镜后方':`　像屏 ${s.xs.toFixed(0)} mm　物屏距离 D = ${(s.xs-XO).toFixed(0)} mm`}</div>`;
@@ -100,6 +121,48 @@ const LN = (() => {
     ctx.strokeStyle='#a9bbd6'; ctx.lineWidth=3; ctx.beginPath(); ctx.ellipse(X(s.xl),y,4,28,0,0,Math.PI*2); ctx.stroke(); ctx.fillStyle='#c9c8c2'; ctx.fillText(s.rev?'透镜（反向）':'透镜',X(s.xl),y-36);
     if (s.mode==='auto'){ ctx.fillStyle='#d6d7dc'; ctx.fillRect(X(s.xl)+8,y-26,4,52); ctx.fillText('平面镜',X(s.xl)+36,y+4); }
     else { ctx.fillStyle='#e9e7e1'; ctx.fillRect(X(s.xs)-2,y-30,5,60); ctx.fillStyle='#c9c8c2'; ctx.fillText('像屏',X(s.xs),y-36); }
+  }
+  /* 光路图：近轴光线追迹的结果，竖直方向放大；屏上（或物屏上）光线的散开范围就是弥散斑 */
+  function rays(){
+    const c=$('#'+P+'-bench'), H=Math.max(160,c.parentElement.clientHeight), {ctx,dpr,W}=setup(c,H); ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.fillStyle='#0f1012'; ctx.fillRect(0,0,W,H);
+    const R=trace(), auto=s.mode==='auto', P0=pp(), im=image();
+    const xs=R.flatMap(r=>r.pts.map(p=>p[0])), x0=XO-30, x1=Math.max(...xs, auto?P0+MIR+20:s.xs+20);
+    const L=30, Rt=W-24, cy=H*0.47, ky=H*0.26/(AP/2), lab=Math.min(H-50, cy+H*0.26+18), X=x=>L+(x-x0)/(x1-x0)*(Rt-L), Yp=y=>cy-y*ky;
+    const F='12px "PingFang SC","Microsoft YaHei UI","Noto Sans SC",sans-serif'; ctx.font=F; ctx.textAlign='center'; ctx.lineCap='round';
+    ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(L-10,cy); ctx.lineTo(Rt+10,cy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.beginPath(); ctx.rect(0,30,W,lab-46); ctx.clip();      // 发散到画面外的光线截掉
+    /* 物 */
+    ctx.strokeStyle='#f2c94c'; ctx.lineWidth=2.2; ctx.beginPath(); ctx.moveTo(X(XO),Yp(0)); ctx.lineTo(X(XO),Yp(H0)); ctx.lineTo(X(XO)-4,Yp(H0)+7); ctx.moveTo(X(XO),Yp(H0)); ctx.lineTo(X(XO)+4,Yp(H0)+7); ctx.stroke();
+    if (auto){ ctx.strokeStyle='rgba(233,231,225,.5)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(X(XO),Yp(AP/2)); ctx.lineTo(X(XO),Yp(-AP/2)); ctx.stroke(); }
+    /* 光线 */
+    for (const r of R){ ctx.strokeStyle = r.kind==='back' ? 'rgba(120,200,255,.75)' : r.kind==='tip' ? 'rgba(255,170,90,.6)' : 'rgba(255,215,120,.8)';
+      ctx.lineWidth=r.kind==='tip'?1:1.3; ctx.setLineDash(r.kind==='back'?[5,3]:r.kind==='tip'?[2,3]:[]);
+      ctx.beginPath(); r.pts.forEach(([x,y],i)=>i?ctx.lineTo(X(x),Yp(y)):ctx.moveTo(X(x),Yp(y))); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.restore();
+    ctx.fillStyle='#c9c8c2'; ctx.fillText(auto?'物（物屏）':'物',X(XO),lab);
+    /* 透镜（在主面处） */
+    ctx.strokeStyle='#a9bbd6'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(X(P0),Yp(AP/2)); ctx.lineTo(X(P0),Yp(-AP/2)); ctx.stroke();
+    for (const sgn of [1,-1]){ ctx.beginPath(); ctx.moveTo(X(P0)-6,Yp(sgn*AP/2)+sgn*7); ctx.lineTo(X(P0),Yp(sgn*AP/2)); ctx.lineTo(X(P0)+6,Yp(sgn*AP/2)+sgn*7); ctx.stroke(); }
+    ctx.fillStyle='#c9c8c2'; ctx.fillText(s.rev?'透镜（反向）':'透镜',X(P0)-(auto?14:0),lab);
+    if (s.checked){ ctx.fillStyle='#8fd3a4'; for (const [x,t] of [[P0-s.f,'F'],[P0+s.f,'F′']]) if (x>x0&&x<x1){ ctx.beginPath(); ctx.arc(X(x),cy,3,0,Math.PI*2); ctx.fill(); ctx.fillText(t,X(x),cy+16); } }
+    let note='';
+    if (auto){
+      const M=P0+MIR; ctx.fillStyle='#d6d7dc'; ctx.fillRect(X(M)-1.5,Yp(AP/2+2),3,(AP+4)*ky); ctx.fillStyle='#c9c8c2'; ctx.fillText('平面镜',X(M)+14,lab);
+      const ends=R.filter(r=>r.kind==='back').map(r=>r.pts[2][1]), lo=Math.min(...ends), hi=Math.max(...ends), spread=hi-lo;
+      ctx.strokeStyle='#ff8a6a'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(X(XO)-5,Yp(hi)); ctx.lineTo(X(XO)-5,Yp(lo)); ctx.stroke();
+      note = spread<0.6 ? `回程光线会聚在物平面上（物的下方，倒像），说明物在透镜焦面上` : `回程光线到物平面时还散开 ${spread.toFixed(1)} mm（红线）：物${pp()-XO>s.f?'在焦点外，透镜要向物靠近':'在焦点内，透镜要远离物'}`;
+    } else {
+      ctx.fillStyle='#e9e7e1'; ctx.fillRect(X(s.xs)-2,Yp(AP/2+3),4,(AP+6)*ky); ctx.fillStyle='#c9c8c2'; ctx.fillText('像屏',X(s.xs),lab);
+      const ends=R.filter(r=>r.kind==='fwd').map(r=>r.pts[2][1]), lo=Math.min(...ends), hi=Math.max(...ends);
+      ctx.strokeStyle='#ff8a6a'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(X(s.xs)+6,Yp(hi)); ctx.lineTo(X(s.xs)+6,Yp(lo)); ctx.stroke();
+      if (im.real && P0+im.v<x1+1){ const xi=P0+im.v, hi2=-H0*im.v/(P0-XO); ctx.strokeStyle='rgba(255,224,150,.9)'; ctx.lineWidth=1.6; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(X(xi),Yp(0)); ctx.lineTo(X(xi),Yp(hi2)); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle='#c9c8c2'; ctx.fillText('像',X(xi),Yp(hi2)+(hi2<0?16:-8)); }
+      note = !im.real ? '透镜离物太近（物在焦点以内），光线经透镜后发散，屏上得不到实像'
+        : im.blur<0.35 ? '光线正好会聚在屏上：像最清晰' : `光线会聚在屏${P0+im.v>s.xs?'后':'前'}，到屏上散开 ${im.blur.toFixed(1)} mm（红线），像是模糊的`;
+    }
+    ctx.textAlign='left'; ctx.fillStyle='#d9d6cf'; ctx.fillText(note,L,H-30);
+    ctx.fillStyle='#6f757d'; ctx.fillText(auto?'实线：去程　虚线：经平面镜反射的回程':'实线：物上一点发出的光　点线：物顶点的特征光线', L, H-12);
   }
   /* 画一个物（向上的箭头加一横），按放大率倒立缩放；blur 用一圈偏移的副本模拟弥散圆 */
   function drawObj(ctx,cx,cy,scale,blur,ppm,col){

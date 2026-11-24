@@ -633,6 +633,77 @@ const MyData = (() => {
       return out;
     }};
 
+  /* ---------- 望远镜 ---------- */
+  SPECS.telescope = {P: 'uts', title: '望远镜放大率与视场测量（实测数据）', ai: '望远镜放大率（比较法、出瞳法）与视场测量',
+    principle: `<p><b>比较法</b>：一只眼睛通过望远镜、另一只眼睛直接看远处的标尺，数出望远镜里 K 块对应直接看到的 N 块，Γ比 = N/K。</p>
+      <p><b>出瞳法</b>：望远镜对着明亮的毛玻璃，在目镜后找到光斑最小、边缘最清晰的位置（出射光瞳），Γ瞳 = D/D′，D 为物镜通光口径，D′ 为出瞳直径。</p>
+      <p><b>视场</b>：读出视场两侧边缘对应的标尺读数 x₁、x₂，物方视场角 2ω = 2·arctan[(x₂ − x₁)/(2L)]，L 为标尺到物镜的距离。</p>
+      <p><b>有限远的修正</b>：标尺不在无穷远时，调焦后镜筒变长，测得的放大率比 f₀/fₑ 大。换算到无穷远：Γ∞ = Γ瞳·(L − f₀)/L；比较法中直接看标尺的眼睛比物镜远 ℓ，Γ∞ = Γ比·(L − f₀)/(L + ℓ)。</p>
+      <p>不确定度：比较法 B 类按估读（默认 0.2 块）；出瞳法按卡尺和光斑直径的估读；视场按边缘估读。A 类取多次测量的标准偏差。</p>`,
+    groups: [
+      {id: 'cmp', name: '比较法', desc: '每一行一次读数：望远镜里 K 块，对应直接看到的 N 块（可以带小数）。参数里的标称焦距和距离用于换算到无穷远、与 f₀/fₑ 比较，可以不填。',
+        params: [{k: 'L', label: '标尺到物镜的距离 L', unit: 'mm', def: '5000', opt: true}, {k: 'fo', label: '物镜标称焦距', unit: 'mm', def: '300', opt: true}, {k: 'fe', label: '目镜标称焦距', unit: 'mm', def: '25', opt: true},
+          {k: 'ell', label: '物镜到眼睛的距离 ℓ（可不填）', unit: 'mm', def: '', opt: true}, {k: 'est', label: '估读误差限', unit: '块', def: '0.2'}],
+        cols: [{k: 'K', label: '望远镜里 K 块'}, {k: 'N', label: '直接看到 N 块'}],
+        example: () => [13.6, 13.7, 13.8, 13.7].map((n, i) => ['1', (n + nz(i, 0.05)).toFixed(1)]), exParams: {ell: '356'}},
+      {id: 'pupil', name: '出瞳法', desc: '每一行一次测量：出瞳（光斑最小、边缘最清晰处）的直径 D′，以及白屏到目镜的距离（可不填）。',
+        params: [{k: 'D', label: '物镜通光口径 D', unit: 'mm', def: '30.00'}, {k: 'uD', label: '卡尺仪器误差限', unit: 'mm', def: '0.02'}, {k: 'ud', label: '光斑直径估读误差限', unit: 'mm', def: '0.05'},
+          {k: 'L', label: '标尺（或调焦）距离 L', unit: 'mm', def: '5000', opt: true}, {k: 'fo', label: '物镜标称焦距', unit: 'mm', def: '300', opt: true}],
+        cols: [{k: 'd', label: '出瞳直径 D′ / mm'}, {k: 'z', label: '白屏到目镜 / mm', opt: true}],
+        example: () => [2.35, 2.40, 2.35].map((d, i) => [d.toFixed(2), (27.5 + nz(i, 0.6)).toFixed(1)])},
+      {id: 'field', name: '视场', desc: '每一行一次读数：视场两侧边缘对应的标尺读数（较小的 x₁、较大的 x₂，单位 mm）。',
+        params: [{k: 'L', label: '标尺到物镜的距离 L', unit: 'mm', def: '5000'}, {k: 'est', label: '边缘估读误差限', unit: 'mm', def: '1'}],
+        cols: [{k: 'x1', label: '较小读数 x₁ / mm'}, {k: 'x2', label: '较大读数 x₂ / mm'}],
+        example: () => [[512, 668], [510, 667], [513, 669]].map(r => r.map(String))}],
+    process(D){
+      const out = {table: '', result: '', issues: [], ai: [], ok: false};
+      const c = D('cmp'), p = D('pupil'), f = D('field');
+      let infC = null, infP = null;
+      if (c.rows.length){
+        const r = c.rows, g = r.map(x => x.N / x.K);
+        out.table += sub('比较法', true) + T(['K', 'N', 'Γ比 = N/K'], r.map((x, i) => [x.raw.K, x.raw.N, Number.isFinite(g[i]) ? g[i].toFixed(2) : '—']));
+        if (r.some(x => !(x.K > 0) || !(x.N > 0))) { out.issues.push('比较法：K 和 N 都应为正数'); }
+        else {
+          const sum = Unc.summarize(g, c.prm.est / Unc.SQRT3 / mean(r.map(x => x.K))), m = sum.mean, th = c.prm.fo && c.prm.fe ? c.prm.fo / c.prm.fe : null;
+          let h = `<div class="result">比较法：Γ比 = ${g.map(v => v.toFixed(2)).join('、')}，平均 <span class="big">${m.toFixed(2)}</span>${Unc.html(sum, 'Γ比', '')}`;
+          if (c.prm.L && c.prm.fo && c.prm.ell != null){ const k = (c.prm.L - c.prm.fo) / (c.prm.L + c.prm.ell); infC = {v: m * k, u: sum.u * k}; h += `<div>换算到无穷远：Γ∞ = Γ比·(L − f₀)/(L + ℓ) = ${Unc.format(infC.v, infC.u, '').text}</div>`; }
+          else if (c.prm.L && c.prm.fo) h += '<div class="hint">填写物镜到眼睛的距离 ℓ 后，可以把比较法的结果换算到无穷远。</div>';
+          if (th) h += `<div>标称 f₀/fₑ = ${th.toFixed(2)}</div>`;
+          out.result += h + '</div>';
+          out.ai.push(`比较法：（K, N）${r.map(x => `(${x.raw.K}, ${x.raw.N})`).join('、')}；Γ比平均 ${m.toFixed(3)}；${Unc.line(sum, 'Γ比', '')}${infC ? `；换算到无穷远 ${infC.v.toFixed(3)}（L=${c.prm.L}，f₀=${c.prm.fo}，ℓ=${c.prm.ell}）` : ''}${th ? `；标称 f₀/fₑ = ${th.toFixed(2)}` : ''}。`);
+          if (th && Math.abs((infC ? infC.v : m) - th) / th > 0.08) out.issues.push(`比较法：结果与标称 f₀/fₑ = ${th.toFixed(2)} 相差 ${pct(((infC ? infC.v : m) - th) / th * 100)}，超过标称焦距的常见公差，检查数块的方法或标称值`);
+          out.ok = true;
+        }
+      }
+      if (p.rows.length){
+        const r = p.rows, g = r.map(x => p.prm.D / x.d);
+        out.table += sub('出瞳法', !c.rows.length) + T(['出瞳直径 D′ / mm', '白屏到目镜 / mm', 'Γ瞳 = D/D′'], r.map((x, i) => [x.raw.d, x.raw.z || '—', Number.isFinite(g[i]) ? g[i].toFixed(2) : '—']));
+        if (r.some(x => !(x.d > 0)) || !(p.prm.D > 0)) out.issues.push('出瞳法：通光口径和出瞳直径都应为正数');
+        else {
+          const uB = mean(r.map((x, i) => g[i] * Math.hypot(p.prm.uD / Unc.SQRT3 / p.prm.D, p.prm.ud / Unc.SQRT3 / x.d))), sum = Unc.summarize(g, uB), m = sum.mean;
+          let h = `<div class="result">出瞳法：D = ${p.raw.D} mm，Γ瞳 = ${g.map(v => v.toFixed(2)).join('、')}，平均 <span class="big">${m.toFixed(2)}</span>${Unc.html(sum, 'Γ瞳', '')}`;
+          if (p.prm.L && p.prm.fo){ const k = (p.prm.L - p.prm.fo) / p.prm.L; infP = {v: m * k, u: sum.u * k}; h += `<div>换算到无穷远：Γ∞ = Γ瞳·(L − f₀)/L = ${Unc.format(infP.v, infP.u, '').text}</div>`; }
+          out.result += h + '</div>';
+          const zs = r.filter(x => x.z != null).map(x => x.z); if (zs.length >= 2 && Math.max(...zs) - Math.min(...zs) > 3) out.issues.push(`出瞳法：各次白屏位置相差 ${(Math.max(...zs) - Math.min(...zs)).toFixed(1)} mm，可能没有每次都找准出瞳（光斑最小、边缘最清晰处）`);
+          out.ai.push(`出瞳法：D = ${p.raw.D} mm，D′ ${r.map(x => x.raw.d).join('、')} mm，白屏位置 ${r.map(x => x.raw.z || '未记').join('、')}；Γ瞳平均 ${m.toFixed(3)}；${Unc.line(sum, 'Γ瞳', '')}${infP ? `；换算到无穷远 ${infP.v.toFixed(3)}` : ''}。`);
+          out.ok = true;
+        }
+      }
+      if (infC && infP && Math.abs(infC.v - infP.v) > 3 * Math.hypot(infC.u, infP.u)) out.issues.push(`两种方法换算到无穷远后相差 ${(infC.v - infP.v).toFixed(2)}，超出不确定度，检查 ℓ、L 或读数`);
+      if (f.rows.length){
+        const r = f.rows, L = f.prm.L;
+        out.table += sub('视场', !c.rows.length && !p.rows.length) + T(['x₁ / mm', 'x₂ / mm', 'x₂ − x₁ / mm'], r.map(x => [x.raw.x1, x.raw.x2, (x.x2 - x.x1).toFixed(0)]));
+        if (r.some(x => !(x.x2 > x.x1))) out.issues.push('视场：有的行 x₂ 不大于 x₁');
+        else if (L > 0){
+          const w = r.map(x => deg(2 * Math.atan((x.x2 - x.x1) / 2 / L))), uB = deg(Math.SQRT2 * f.prm.est / Unc.SQRT3 / L), sum = Unc.summarize(w, uB);
+          out.result += `<div class="result">视场：物方视场角 2ω = 2·arctan[(x₂ − x₁)/(2L)]，各次 ${w.map(v => v.toFixed(3)).join('、')}°，平均 <span class="big">${sum.mean.toFixed(3)}°</span>${Unc.html(sum, '2ω', '°')}</div>`;
+          out.ai.push(`视场：L = ${L} mm，（x₁, x₂）${r.map(x => `(${x.raw.x1}, ${x.raw.x2})`).join('、')}；2ω 平均 ${sum.mean.toFixed(3)}°。`);
+          out.ok = true;
+        }
+      }
+      return out;
+    }};
+
   /* ================= 页面与交互 ================= */
   const S = {};                                   // 各实验的存档对象
   const blank = spec => ({g: spec.groups[0].id, prm: {}, rows: [], ex: {}, checked: false, review: ''});   // ex：v1.8.0 按组记录示例数据，读入后转成逐格标记
