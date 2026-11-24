@@ -28,7 +28,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import report
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.10.1"
+APP_VERSION = "1.11.0"
 
 
 # ---------------- 路径 ----------------
@@ -131,7 +131,7 @@ def write_log(record):
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-LAB_NAMES = {"mi": "迈克尔逊干涉仪", "nr": "牛顿环", "sp": "分光计", "fb": "光纤弯曲损耗", "pl": "马吕斯定律与波片", "ld": "半导体激光器与光电二极管", "bm": "激光光束半径与 M²", "ln": "光具座测焦距", "ts": "望远镜放大率与视场"}
+LAB_NAMES = {"mi": "迈克尔逊干涉仪", "nr": "牛顿环", "sp": "分光计", "pm": "三棱镜折射率", "fb": "光纤弯曲损耗", "pl": "马吕斯定律与波片", "ld": "半导体激光器与光电二极管", "bm": "激光光束半径与 M²", "ln": "光具座测焦距", "ts": "望远镜放大率与视场"}
 # “处理我的数据”：真实实验数据，存档与虚拟实验分开
 LAB_NAMES.update({"u" + k: v + "（实测数据）" for k, v in list(LAB_NAMES.items())})
 

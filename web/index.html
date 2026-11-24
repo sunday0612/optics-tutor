@@ -79,6 +79,7 @@
     <button class="labtab" data-lab="michelson">迈克尔逊干涉仪测波长</button>
     <button class="labtab" data-lab="newton">牛顿环测曲率半径</button>
     <button class="labtab" data-lab="grating">分光计测光栅常数</button>
+    <button class="labtab" data-lab="prism">三棱镜折射率</button>
     <button class="labtab" data-lab="fiber">光纤耦合与弯曲损耗</button>
     <button class="labtab" data-lab="polar">马吕斯定律与波片</button>
     <button class="labtab" data-lab="laser">半导体激光器特性</button>
@@ -89,6 +90,7 @@
   <div class="labwrap" id="labbox-michelson"></div>
   <div class="labwrap" id="labbox-newton" hidden></div>
   <div class="labwrap" id="labbox-grating" hidden></div>
+  <div class="labwrap" id="labbox-prism" hidden></div>
   <div class="labwrap" id="labbox-fiber" hidden></div>
   <div class="labwrap" id="labbox-polar" hidden></div>
   <div class="labwrap" id="labbox-laser" hidden></div>
@@ -103,6 +105,7 @@
     <button class="labtab datatab" data-data="michelson">迈克尔逊干涉仪测波长</button>
     <button class="labtab datatab" data-data="newton">牛顿环测曲率半径</button>
     <button class="labtab datatab" data-data="grating">分光计测光栅常数</button>
+    <button class="labtab datatab" data-data="prism">三棱镜折射率</button>
     <button class="labtab datatab" data-data="fiber">光纤耦合与弯曲损耗</button>
     <button class="labtab datatab" data-data="polar">马吕斯定律与波片</button>
     <button class="labtab datatab" data-data="laser">半导体激光器特性</button>
@@ -113,6 +116,7 @@
   <div class="labwrap" id="databox-michelson"></div>
   <div class="labwrap" id="databox-newton" hidden></div>
   <div class="labwrap" id="databox-grating" hidden></div>
+  <div class="labwrap" id="databox-prism" hidden></div>
   <div class="labwrap" id="databox-fiber" hidden></div>
   <div class="labwrap" id="databox-polar" hidden></div>
   <div class="labwrap" id="databox-laser" hidden></div>
@@ -163,12 +167,12 @@
     </section>
     <section class="sheet-sec">
       <h3>关于</h3>
-      <p>光影助教 <span id="appVersion"></span>。现象仿真覆盖杨氏双缝、单缝衍射、光栅衍射、牛顿环和马吕斯定律；虚拟实验包括迈克尔逊干涉仪、牛顿环、分光计、光纤耦合与弯曲损耗、马吕斯定律与波片、半导体激光器与光电二极管特性、激光光束半径与 M²、光具座测凸透镜焦距、望远镜放大率与视场；这九个实验都可以在“处理我的数据”中处理实测数据。</p>
+      <p>光影助教 <span id="appVersion"></span>。现象仿真覆盖杨氏双缝、单缝衍射、光栅衍射、牛顿环和马吕斯定律；虚拟实验包括迈克尔逊干涉仪、牛顿环、分光计、光纤耦合与弯曲损耗、马吕斯定律与波片、半导体激光器与光电二极管特性、激光光束半径与 M²、光具座测凸透镜焦距、望远镜放大率与视场、三棱镜折射率（最小偏向角法）；这十个实验都可以在“处理我的数据”中处理实测数据。</p>
     </section>
   </div>
 </div>
 
-<!-- 按顺序加载：公共工具 → 现象仿真 → 九个虚拟实验 → 设置 → 页面路由 -->
+<!-- 按顺序加载：公共工具 → 现象仿真 → 十个虚拟实验 → 设置 → 页面路由 -->
 <script src="js/core.js"></script>
 <script src="js/uncertainty.js"></script>
 <script src="js/learn.js"></script>
@@ -178,6 +182,7 @@
 <script src="js/lab-michelson.js"></script>
 <script src="js/lab-newton.js"></script>
 <script src="js/lab-spectrometer.js"></script>
+<script src="js/lab-prism.js"></script>
 <script src="js/lab-fiber.js"></script>
 <script src="js/lab-polarization.js"></script>
 <script src="js/lab-laser.js"></script>

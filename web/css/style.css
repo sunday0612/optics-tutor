@@ -197,7 +197,7 @@ input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radiu
 /* 当前步骤：整页的视觉重点 */
 .steps li.now{color:var(--ink);background:var(--coat-soft);border-radius:0 6px 6px 0;padding:10px 10px 11px 8px;margin:6px -8px;box-shadow:inset 3px 0 0 var(--coat);font-size:14px;line-height:1.75}
 .steps li.now .s{background:var(--coat);border-color:var(--coat);color:#fff;font-weight:600;margin-top:3px}
-.steps li.now .t b{font-size:15px;display:block;margin-bottom:2px}
+.steps li.now .t>b{font-size:15px;display:block;margin-bottom:2px}
 .steps li.now .d{display:inline}
 .steps li.now .d::before{content:none}
 .steps li:focus-visible{outline:2px solid var(--coat);outline-offset:1px}
@@ -224,6 +224,7 @@ table.data tr.warn td{color:var(--bad)}
 .counter{position:absolute;right:8px;bottom:8px;font-size:12px;color:var(--engrave);background:rgba(14,15,17,.78);border:1px solid var(--anod-hair);padding:2px 9px;border-radius:4px;font-variant-numeric:tabular-nums}
 .msg{position:absolute;left:50%;transform:translateX(-50%);top:44%;width:max-content;max-width:calc(100% - 24px);text-align:center;color:#fff;font-size:13px;line-height:1.5;pointer-events:none;text-shadow:0 1px 2px #000;background:rgba(10,11,13,.72);padding:4px 12px;border-radius:14px;box-sizing:border-box}
 .msg:empty{display:none}
+.msg.low{top:auto;bottom:9%}
 .panel{display:flex;flex-direction:column;gap:12px;color:#C9C8C2;font-size:13px}
 .panel .seg{display:flex;gap:2px;flex-wrap:wrap}
 .panel .ctl{padding:0}
@@ -235,6 +236,8 @@ table.data tr.warn td{color:var(--bad)}
 .hold{background:#1E2125;border:1px solid var(--anod-hair);color:var(--engrave);border-radius:5px;padding:7px 14px;font-size:13.5px;user-select:none;-webkit-user-select:none;touch-action:none}
 .hold:hover{border-color:#4A4F57}
 .hold:active{background:#2B2F35}
+.scope .ghost{background:#1E2125;border-color:var(--anod-hair);color:var(--engrave)}
+.scope .ghost:hover{border-color:#4A4F57}
 .scope select{font:inherit;font-size:13px;background:#1E2125;color:var(--engrave);border:1px solid var(--anod-hair);border-radius:5px;padding:6px 8px}
 .panel label{color:#C9C8C2}
 .tip{font-size:12px;color:#7D8289;line-height:1.6}
@@ -392,3 +395,30 @@ details.rawdata[open] summary{margin-bottom:4px}
 .inquiry .inq-ok{margin-top:8px;color:#2f7a4a;font-weight:600;font-size:13.5px}
 .inquiry .inq-r{margin-top:8px;padding:8px 12px;background:var(--coat-soft);border-radius:6px;font-size:13.5px;line-height:1.75}
 .inquiry input{font:inherit;font-size:13.5px;border:1px solid var(--hair);border-radius:5px;padding:4px 8px;background:#fff}
+
+/* ---------- 误差预算 ---------- */
+.budget{margin:6px 0 0;font-size:12.5px;color:var(--muted);line-height:1.6}
+.budget .bl{color:var(--ink);font-weight:600;margin-right:8px}
+.budget .bar{display:inline-flex;width:120px;height:8px;border-radius:4px;overflow:hidden;vertical-align:middle;margin-right:8px;background:var(--hair-2)}
+.budget .ba{display:block;height:100%;background:#d08a3c}
+.budget .bb{display:block;height:100%;background:var(--coat)}
+.budget .btip{color:var(--muted)}
+
+/* ---------- 思考题、AI 追问 ---------- */
+.th-q{margin-top:10px}
+.th-t{font-size:13.5px;color:var(--ink);line-height:1.7}
+.th-q textarea{width:100%;box-sizing:border-box;margin-top:4px;font:inherit;font-size:13.5px;line-height:1.6;border:1px solid var(--hair);border-radius:6px;padding:6px 9px;background:#fff;resize:vertical}
+.th-q textarea:focus{outline:2px solid var(--coat);outline-offset:-1px;border-color:transparent}
+.th-r{margin-top:4px;font-size:13px;color:#33373D;padding:6px 10px;background:var(--coat-soft);border-radius:6px;line-height:1.6}
+.th-r b{color:var(--coat)}
+.follow{padding:10px 12px;border:1px solid #ecd49c;background:#fffaf0;border-radius:8px}
+
+/* ---------- 作图法 ---------- */
+.graphs:empty{display:none}
+.graphs{margin-top:10px}
+details.graphw{margin-top:8px;border:1px solid var(--hair);border-radius:8px;padding:6px 12px;background:#fff}
+details.graphw summary{cursor:pointer;font-size:13.5px;color:var(--coat);font-weight:600;padding:2px 0}
+details.graphw[open]{padding-bottom:10px}
+.gw{width:100%;display:block;margin-top:8px;border-radius:4px;touch-action:none;cursor:crosshair}
+.gw-out{margin-top:6px;font-size:13px;line-height:1.7;font-variant-numeric:tabular-nums}
+.des-chart{margin-top:8px}

@@ -182,6 +182,7 @@ const MyData = (() => {
               ${f ? `<div>对照：D<sub>k</sub>² 对 k 直线拟合，斜率 ${f.b.toFixed(4)} mm²，R = ${fmtU(Rf, uRf, 'm')}，截距 ${f.a.toFixed(4)} mm²，R² = ${f.r2.toFixed(5)}${Math.abs(f.a) > 0.05 * f.b ? '（截距不为零，说明接触处有灰尘或形变，正是要用逐差法的原因）' : ''}</div>` : ''}
               <canvas class="chart" data-plot="nr"></canvas></div>`;
             out.charts = [cv => plot(cv, {pts: r.map(x => [x.k, x.D ** 2]), fit: f ? k => f.a + f.b * k : null, xl: '级次 k', yl: 'D² / mm²'})];
+            if (f) (out.graphs = out.graphs || []).push({title: '牛顿环 D² − k 图', pts: r.map(x => [x.k, x.D ** 2]), fit: f, xl: '级次 k', yl: 'D² / mm²', derive: k => `R = 斜率/(4λ) = ${(k / (4 * lam) / 1000).toFixed(4)} m`});
             if (f && f.r2 < 0.999) out.issues.push(`牛顿环：D² 与 k 的线性不太好（R² = ${f.r2.toFixed(4)}），有的环可能读错`);
             refCheck(out, '牛顿环', m, g.prm.ref);
             out.ai.push(`牛顿环：λ = ${g.prm.lam} nm；各环（k, 左, 右）：${r.map(x => `(${x.raw.k}, ${x.raw.L}, ${x.raw.R})`).join('、')}；逐差各组 R ${Rs.map(v => v.toFixed(4)).join('、')} m；${Unc.line(sum, 'R', 'm')}；直线拟合 R = ${Rf != null ? Rf.toFixed(4) : '—'} m，截距 ${f ? f.a.toFixed(4) : '—'} mm²。`);
@@ -278,6 +279,86 @@ const MyData = (() => {
       return out;
     }};
 
+  /* ---------- 三棱镜折射率（最小偏向角法） ---------- */
+  const PRISM_EX = {A: 60.0333, a: 1.6225, b: 12500, z: 161.25};
+  const prismDev = l => { const n = PRISM_EX.a + PRISM_EX.b / (l * l), A = rad(PRISM_EX.A); return deg(2 * Math.asin(n * Math.sin(A / 2))) - PRISM_EX.A; };
+  SPECS.prism = {P: 'upm', title: '分光计测三棱镜折射率（实测数据）', ai: '分光计用最小偏向角法测三棱镜折射率（汞灯）',
+    principle: `<p>自准法测顶角：载物台不动，望远镜先后正对 AB、AC 两个光学面，两次方位差 φ = (|θ₁ − θ₁′| + |θ₂ − θ₂′|)/2，<b>A = 180° − φ</b>。</p>
+      <p>最小偏向角：δ<sub>min</sub> = (|θ − θ₀| + |θ′ − θ₀′|)/2，θ、θ′ 为最小偏向位置的左右游标读数，θ₀、θ₀′ 为直射光位置。<b>n = sin[(A + δ<sub>min</sub>)/2] / sin(A/2)</b>。</p>
+      <p>不确定度：A、δ 的 B 类 u = Δ<sub>仪</sub>/√3，再按 ∂n/∂A = −sin(δ/2)/[2sin²(A/2)]、∂n/∂δ = cos[(A+δ)/2]/[2sin(A/2)] 传递。测了 3 条以上谱线时作 n − 1/λ² 图（柯西公式 n = a + b/λ²）。</p>
+      <p>角度可以写成 164°31′、164 31 或 164.52（度）。</p>`,
+    groups: [
+      {id: 'apex', name: '测顶角', desc: '自准法：每行一组——望远镜正对 AB 面时的左、右游标读数，再正对 AC 面时的左、右游标读数。两次之间不要碰载物台。建议 2～3 组。',
+        params: [{k: 'inst', label: '游标仪器误差限', unit: '′', def: '1'}],
+        cols: [{...ANG('a1'), label: 'AB 面 左游标'}, {...ANG('a2'), label: 'AB 面 右游标'}, {...ANG('b1'), label: 'AC 面 左游标'}, {...ANG('b2'), label: 'AC 面 右游标'}],
+        example: () => [0, 1].map(i => { const z = 42.3 + i * 15.2, ph = 180 - PRISM_EX.A + nz(i, 0.012); return [z, z + 180 + nz(i + 3, 0.012), z + ph, z + 180 + ph].map(v => dms(v)); })},
+      {id: 'zero', name: '直射光位置', desc: '取下三棱镜，望远镜对准狭缝像读左、右游标。测一次即可，多测几次会取平均。',
+        params: [],
+        cols: [{...ANG('z1'), label: '左游标 θ₀'}, {...ANG('z2'), label: '右游标 θ₀′'}],
+        example: () => [[dms(PRISM_EX.z), dms(PRISM_EX.z + 180.02)]]},
+      {id: 'dev', name: '最小偏向位置', desc: '每找到一次最小偏向位置记一行。同一谱线可以重复几行；“谱线波长”不填时按汞绿线 546.1 nm 处理。',
+        params: [{k: 'nref', label: '参考折射率（可不填）', unit: '', def: '', opt: true}],
+        cols: [{k: 'lam', label: '谱线波长 / nm', opt: true}, {...ANG('t1'), label: '左游标 θ'}, {...ANG('t2'), label: '右游标 θ′'}],
+        example: () => [546.1, 546.1, 546.1, 404.7, 435.8, 577.0].map((l, i) => { const d = prismDev(l) + nz(i + 7, 0.012); return [String(l), dms(PRISM_EX.z - d), dms(PRISM_EX.z + 180 - d + nz(i + 9, 0.012))]; })}],
+    process(D){
+      const out = {table: '', result: '', issues: [], ai: [], ok: false};
+      const a = D('apex'), z = D('zero'), v = D('dev'), inst = (a.prm.inst || 1) / 60, uB = inst / Math.sqrt(3);
+      let sumA = null;
+      if (a.rows.length){
+        const items = a.rows.map(x => { const pL = angDiff(x.a1, x.b1), pR = angDiff(x.a2, x.b2), phi = (pL + pR) / 2; return {...x, pL, pR, phi, A: 180 - phi}; });
+        items.forEach(x => {
+          if (Math.abs(x.pL - x.pR) * 60 > 6) out.issues.push(`顶角第 ${x.no} 组：左右游标得到的 φ 相差 ${(Math.abs(x.pL - x.pR) * 60).toFixed(0)}′（一般只差几分），可能读错或抄错游标`);
+          if (Math.abs(angDiff(x.a1, x.a2) - 180) > 2) out.issues.push(`顶角第 ${x.no} 组：AB 面左右游标读数相差不是约 180°，可能抄错`);
+          if (!(x.A > 0 && x.A < 180)) out.issues.push(`顶角第 ${x.no} 组：算出的 A = ${x.A.toFixed(2)}°，不合理`);
+        });
+        out.table += sub('测顶角（自准法）', true) + T(['组', 'AB 左', 'AB 右', 'AC 左', 'AC 右', 'φ', 'A'], items.map(x => [x.no, x.raw.a1, x.raw.a2, x.raw.b1, x.raw.b2, dms(x.phi), dms(x.A)]));
+        const ok = items.filter(x => x.A > 0 && x.A < 180);
+        if (ok.length){ sumA = Unc.summarize(ok.map(x => x.A), uB);
+          out.result += `<div class="result">顶角：各组 A = ${ok.map(x => x.A.toFixed(4) + '°').join('、')}（${ok.map(x => dms(x.A)).join('、')}）${Unc.html(sumA, 'A', '°')}${ok.length < 2 ? '<div class="hint">建议至少测 2 组。</div>' : ''}</div>`;
+          out.ai.push(`顶角：各组（AB 左/右，AC 左/右）${items.map(x => `(${x.raw.a1}, ${x.raw.a2}, ${x.raw.b1}, ${x.raw.b2})`).join('；')}；A = ${ok.map(x => x.A.toFixed(4)).join('、')}°；${Unc.line(sumA, 'A', '°')}。`);
+          out.ok = true; }
+      }
+      if (v.rows.length){
+        if (!z.rows.length){ out.result += '<div class="hint">还没有直射光位置：在“直射光位置”里录入，才能算偏向角。</div>'; return out; }
+        const z1 = z.rows.map(r => r.z1), z2 = z.rows.map(r => r.z2);
+        const devOf = x => mean(z1.map((q, i) => (angDiff(x.t1, q) + angDiff(x.t2, z2[i])) / 2));
+        const items = v.rows.map(x => ({...x, w: x.lam || 546.1, d: devOf(x)}));
+        items.forEach(x => { const dl = mean(z1.map(q => angDiff(x.t1, q))), dr = mean(z2.map(q => angDiff(x.t2, q)));
+          if (Math.abs(dl - dr) * 60 > 6) out.issues.push(`最小偏向第 ${x.no} 行：左右游标得到的偏向角相差 ${(Math.abs(dl - dr) * 60).toFixed(0)}′，可能读错或抄错`); });
+        if (z.rows.length > 1 && Math.max(...z.rows.map(r => angDiff(r.z1, z.rows[0].z1))) * 60 > 3) out.issues.push('直射光：几次读数相差超过 3′，检查是否读错或载物台、望远镜被碰过');
+        const byW = {}; items.forEach(x => { (byW[x.w] = byW[x.w] || []).push(x); });
+        const ws = Object.keys(byW).map(Number).sort((p, q) => byW[q].length - byW[p].length || Math.abs(p - 546.1) - Math.abs(q - 546.1));
+        out.table += sub('最小偏向角', !a.rows.length) + T(['谱线 / nm', '左游标 θ', '右游标 θ′', 'δ'], items.map(x => [x.lam ? x.raw.lam : '546.1（默认）', x.raw.t1, x.raw.t2, dms(x.d)])) +
+          `<div class="hint">直射光位置：${z.rows.map(r => `${r.raw.z1} / ${r.raw.z2}`).join('；')}</div>`;
+        const w0 = ws[0], sumD = Unc.summarize(byW[w0].map(x => x.d), uB);
+        out.result += `<div class="result">最小偏向角（${w0} nm）：各次 δ = ${byW[w0].map(x => x.d.toFixed(4) + '°').join('、')}${Unc.html(sumD, 'δ<sub>min</sub>', '°')}</div>`;
+        out.ai.push(`直射光 ${z.rows.map(r => `${r.raw.z1}/${r.raw.z2}`).join('；')}；最小偏向位置（λ, θ, θ′）：${items.map(x => `(${x.w}, ${x.raw.t1}, ${x.raw.t2}) δ=${x.d.toFixed(4)}°`).join('；')}；${Unc.line(sumD, 'δ', '°')}。`);
+        out.ok = true;
+        if (sumA){
+          const A = rad(sumA.mean), sA = Math.sin(A / 2), nOf = d => Math.sin((A + rad(d)) / 2) / sA;
+          const d = rad(sumD.mean), n = nOf(sumD.mean), pA = -Math.sin(d / 2) / (2 * sA * sA), pD = Math.cos((A + d) / 2) / (2 * sA);
+          const fA = Math.abs(pA) * rad(sumA.u), fD = Math.abs(pD) * rad(sumD.u), un = Math.hypot(fA, fD), f = Unc.format(n, un, ''), p3 = q => (+q.toPrecision(3)).toString();
+          out.result += `<div class="result">折射率（${w0} nm）：n = sin[(A + δ)/2]/sin(A/2) = <span class="big">${n.toFixed(5)}</span>
+            <div class="unc">∂n/∂A = ${p3(pA)} /rad，∂n/∂δ = ${p3(pD)} /rad；来自顶角 ${p3(fA)}，来自偏向角 ${p3(fD)}，合成 u(n) = ${p3(un)}
+            <div class="final">结果：<b>n = ${f.text}</b>，相对不确定度 ${f.rel.toFixed(3)}%</div></div>${v.prm.nref ? `<div>${cmp(n, v.prm.nref, '参考')}</div>` : ''}</div>`;
+          if (v.prm.nref) refCheck(out, '折射率', n, v.prm.nref, 0.5);
+          if (n < 1.3 || n > 2.2) out.issues.push(`折射率 ${n.toFixed(4)} 不像常见玻璃（1.4～1.9），检查顶角和直射光读数`);
+          out.ai.push(`n = ${n.toFixed(5)}，u(n) = ${un.toExponential(2)}（来自顶角 ${fA.toExponential(2)}，来自偏向角 ${fD.toExponential(2)}）${v.prm.nref ? `；参考 ${v.prm.nref}` : ''}。`);
+          const lines = ws.filter(w => w).sort((p, q) => p - q).map(w => ({w, n: nOf(mean(byW[w].map(x => x.d)))}));
+          if (lines.length > 1){
+            out.result += `<div class="result">色散：${lines.map(l => `λ = ${l.w} nm，n = ${l.n.toFixed(4)}`).join('；')}</div>`;
+            lines.forEach((l, i) => { if (i && l.n > lines[i - 1].n + 2e-4) out.issues.push(`色散：${l.w} nm 的 n 比更短波长 ${lines[i - 1].w} nm 的还大，正常色散下 n 随波长增大而减小，检查谱线是否认错`); });
+            if (lines.length >= 3){ const pts = lines.map(l => [1e6 / (l.w * l.w), l.n]), fit = linfit(pts.map(p => p[0]), pts.map(p => p[1]));
+              if (fit){ out.charts = (out.charts || []).concat([cv => plot(cv, {pts, fit: x => fit.a + fit.b * x, xl: '1/λ² / µm⁻²', yl: 'n'})]);
+                (out.graphs = out.graphs || []).push({title: '色散 n − 1/λ² 图（柯西公式）', pts, fit, xl: '1/λ² / µm⁻²', yl: 'n', derive: (k, c) => `柯西系数 a = ${c.toFixed(4)}，b = 斜率 = ${k.toFixed(4)} µm²`});
+                out.result += `<div class="hint">柯西拟合 n = a + b/λ²：a = ${fit.a.toFixed(4)}，b = ${fit.b.toFixed(4)} µm²（${(fit.b * 1e6).toExponential(3)} nm²）</div>`;
+                out.ai.push(`色散：${lines.map(l => `${l.w} nm n=${l.n.toFixed(4)}`).join('，')}；柯西 a=${fit.a.toFixed(4)}，b=${fit.b.toFixed(4)} µm²。`); } }
+          }
+        } else out.result += '<div class="hint">录入顶角数据后才能计算折射率。</div>';
+      }
+      return out;
+    }};
+
   /* ---------- 光纤 ---------- */
   SPECS.fiber = {P: 'ufb', title: '光纤耦合效率、弯曲损耗与远场发散角（实测数据）', ai: '光纤耦合效率、弯曲损耗与远场发散角',
     principle: `<p><b>耦合效率</b> η = P<sub>出</sub>/P<sub>入</sub>，耦合损耗 = −10·lg η（dB）。</p>
@@ -327,6 +408,7 @@ const MyData = (() => {
             let lo = 0.5, hi = 100; for (let k = 0; k < 60; k++){ const m = (lo + hi) / 2; if (Lf(m) > 0.1) lo = m; else hi = m; }
             h += `<div>拟合 ln(L/√R) = a − cR：c = ${fmtU(cc, fit.sb, 'mm⁻¹')}，R² = ${fit.r2.toFixed(4)}；每圈损耗降到 0.1 dB 的半径约 <span class="big">${((lo + hi) / 2).toFixed(1)} mm</span></div><canvas class="chart" data-plot="fb"></canvas>`;
             out.charts = (out.charts || []).concat([cv => plot(cv, {pts, fit: Lf, xl: 'R / mm', yl: 'L / (dB/圈)'})]);
+            (out.graphs = out.graphs || []).push({title: '弯曲损耗 ln(L/√R) − R 图（化曲为直）', pts: pts.map(p => [p[0], Math.log(p[1] / Math.sqrt(p[0]))]), fit, xl: 'R / mm', yl: 'ln(L/√R)', derive: k => `c = −斜率 = ${(-k).toFixed(3)} mm⁻¹`});
             out.ai.push(`弯曲损耗：${it.map(x => `R=${x.raw.R} N=${x.raw.N} P₀=${x.raw.P0} P=${x.raw.P} 复测=${x.raw.P0b || '无'}`).join('；')}；拟合 c = ${cc.toFixed(3)} mm⁻¹，R² = ${fit.r2.toFixed(4)}。`);
             out.ok = true;
           } else h += '<div class="note">损耗没有随半径增大而减小，无法拟合，检查数据。</div>';
@@ -346,6 +428,7 @@ const MyData = (() => {
             ${finalBlock(`不确定度：u<sub>A</sub>(θ) = ${fit.sb != null ? p3(fit.sb * 1000) + ' mrad' : '—'}（拟合），u<sub>B</sub>(θ) = ${p3(uB * 1000)} mrad（分度 ${f.prm.res} mm）`, 'θ', th * 1000, u * 1000, 'mrad')}
             <canvas class="chart" data-plot="far"></canvas></div>`;
           out.charts = (out.charts || []).concat([cv => plot(cv, {pts: r.map(x => [x.L, x.r]), fit: L => fit.a + fit.b * L, xl: 'L / mm', yl: 'r / mm'})]);
+          (out.graphs = out.graphs || []).push({title: '远场 r − L 图', pts: r.map(x => [x.L, x.r]), fit, xl: 'L / mm', yl: 'r / mm', derive: (k, c) => `半发散角 θ = 斜率 = ${(k * 1000).toFixed(1)} mrad，端面偏移 ΔL = 截距/斜率 = ${(c / k).toFixed(2)} mm`});
           if (fit.r2 < 0.995) out.issues.push(`远场：r 与 L 的线性不太好（R² = ${fit.r2.toFixed(4)}），可能有的光斑量错，或离光纤端面太近还没到远场`);
           out.ai.push(`远场：（L, r）${r.map(x => `(${x.raw.L}, ${x.raw.r})`).join('、')}；θ = ${(th * 1000).toFixed(2)} ± ${(u * 1000).toFixed(2)} mrad，MFD ≈ ${(mfd * 1000).toFixed(2)} µm。`);
           out.ok = true;
@@ -456,7 +539,8 @@ const MyData = (() => {
           const Imax = Math.max(...G.r.map(x => x.I));
           if (!(G.fit.ith > 0) || G.fit.ith > Imax){ const why = G.fit.ith > 0 ? '超出了测量的最大电流' : '小于 0，说明没有测到阈值以下的点，或线性段下限设得太低';
             h += `<div class="note">T = ${G.T} °C：拟合得到的阈值电流 ${G.fit.ith.toFixed(2)} mA ${why}，不能作为结果。</div>`; out.issues.push(`P–I（${G.T} °C）：阈值电流 ${why}`); G.fit = null; return; }
-          const f = G.fit, ed = f.eta * g.prm.lam / 1239.84;
+          const f = G.fit, ed = f.eta * g.prm.lam / 1239.84, lf = linfit(G.lin.map(x => x.I), G.lin.map(x => x.P));
+          if (lf) (out.graphs = out.graphs || []).push({title: `P − I 线性段（${G.T} °C）`, pts: G.lin.map(x => [x.I, x.P]), fit: lf, xl: 'I / mA', yl: 'P / mW', derive: (k, c) => `斜率效率 η = ${k.toFixed(3)} W/A，阈值 I_th = −截距/斜率 = ${(-c / k).toFixed(2)} mA`});
           h += `<div class="result">T = ${G.T} °C：线性段拟合 P = η(I − I<sub>th</sub>)，R² = ${f.r2.toFixed(5)}
             <div>阈值电流 I<sub>th</sub> = <span class="big">${fmtU(f.ith, f.uith, 'mA')}</span>，斜率效率 η = ${fmtU(f.eta, f.ueta, 'W/A')}，外微分量子效率 η<sub>d</sub> = ${(ed * 100).toFixed(1)}%</div></div>`;
           if (G.below < 2) out.issues.push(`P–I（${G.T} °C）：阈值以下只有 ${G.below} 个点，看不清阈值前后的转折，应在阈值附近多测几个点`);
@@ -483,6 +567,7 @@ const MyData = (() => {
         else if (!(f.b > 0) || !(f.b > 3 * (f.sb || 0))){ out.result += '<div class="note">光电二极管：光电流没有随入射功率明显增大，无法确定响应度。检查光电二极管是否对准光束、偏置和电流表接线，以及读数单位。</div>'; out.issues.push('光电二极管：光电流不随功率增大，无法确定响应度'); }
         else {
           const R = f.b / 1000, uA = f.sb != null ? f.sb / 1000 : null, uB = R * d.prm.acc / 100 / Unc.SQRT3, u = Unc.combine(uA, uB), qe = R * 1239.84 / d.prm.lam;
+          (out.graphs = out.graphs || []).push({title: '光电二极管 I_ph − P 图', pts: r.map(x => [x.P, x.I]), fit: f, xl: 'P / mW', yl: 'I_ph / µA', derive: (k, c) => `响应度 R = 斜率 = ${(k / 1000).toFixed(4)} A/W，截距 ${c.toFixed(2)} µA（暗电流）`});
           out.result += `<div class="result">光电二极管：I<sub>ph</sub> 对 P 直线拟合，R² = ${f.r2.toFixed(5)}，截距 ${f.a.toFixed(3)} µA${d.prm.dark != null ? `（实测暗电流 ${d.prm.dark} µA）` : ''}
             <div>响应度 R = <span class="big">${R.toFixed(4)} A/W</span>，量子效率 ${(qe * 100).toFixed(1)}%</div>
             ${finalBlock(`不确定度：u<sub>A</sub> = ${uA != null ? p3(uA) : '—'} A/W（拟合），u<sub>B</sub> = ${p3(uB)} A/W（功率计 ${d.prm.acc}%）`, 'R', R, u, 'A/W')}</div>`;
@@ -609,7 +694,7 @@ const MyData = (() => {
         if (ok.length){
           const uD = Math.SQRT2 * g2.prm.inst / Unc.SQRT3, uB = mean(ok.map(x => Math.hypot((x.D * x.D + x.d * x.d) / (4 * x.D * x.D) * uD, x.d / (2 * x.D) * uD)));
           const sum = Unc.summarize(ok.map(x => x.f), uB);
-          ok.forEach(x => { if (x.D < 4 * sum.mean * 1.05) out.issues.push(`二次成像法：D = ${x.D.toFixed(1)} mm 只比 4f 略大，两次成像位置靠得很近，误差大`); });
+          ok.forEach(x => { if (x.D < 4 * sum.mean * 1.02) out.issues.push(`二次成像法：D = ${x.D.toFixed(1)} mm 几乎等于 4f，两个清晰位置的“清晰范围”接近重叠，不容易分辨`); });
           out.result += `<div class="result">二次成像法：各次 f ${ok.map(x => x.f.toFixed(1)).join('、')} mm，平均 <span class="big">${sum.mean.toFixed(1)} mm</span>${Unc.html(sum, 'f', 'mm')}</div>`;
           out.ai.push(`二次成像法：（物, 屏, x₁, x₂）${it.map(x => `(${x.raw.xo}, ${x.raw.xs}, ${x.raw.x1}, ${x.raw.x2})`).join('、')}；f = ${sum.mean.toFixed(2)} mm；${Unc.line(sum, 'f', 'mm')}。`);
           out.ok = true;
@@ -815,6 +900,7 @@ const MyData = (() => {
     $('#' + P + '-rawsum').textContent = nRows ? `原始读数与中间量（${nRows} 行）` : '原始读数与中间量';
     $('#' + P + '-result').innerHTML = (res.entered ? '' : '<div class="empty">还没有数据。在右边录入实验课上记下的原始数据，结果和数据检查会显示在这里。</div>') + res.result + (res.issues.length ? `<div class="note"><b>程序检查发现：</b>${res.issues.map(esc).join('；')}。</div>` : res.ok ? '<div class="hint">程序检查没有发现明显问题。</div>' : '');
     $('#' + P + '-result').querySelectorAll('canvas[data-plot]').forEach((cv, i) => res.charts?.[i]?.(cv));
+    Learn.graphs(P, res.graphs || []);
     renderSteps(P, [
       [res.entered && res.prmOk, `<b>选择内容、核对参数</b>：右边选择要处理的实验内容（${spec.groups.map(g => g.name).join('、')}），按你的实验条件修改参数，如波长、仪器误差限。`],
       [res.entered, '<b>录入数据</b>：照实验记录本把原始读数填进右边的表格，也可以从 Excel / WPS 复制粘贴。不会填时，点“填入示例数据”看看格式。'],
@@ -827,6 +913,7 @@ const MyData = (() => {
   function mount(key, el){
     const spec = SPECS[key]; spec.key = key; const P = spec.P;
     el.innerHTML = labShell(P, {title: spec.title, principle: spec.principle, right: entryHTML(spec), rightClass: 'card ud-card', recBar: false, resultFirst: true});
+    $('#' + P + '-result').insertAdjacentHTML('afterend', `<div class="graphs" id="${P}-graph"></div>`);
     const s = S[key] = blank(spec);
     LabStore.restore(P, s);
     if (!spec.groups.some(g => g.id === s.g)) s.g = spec.groups[0].id;

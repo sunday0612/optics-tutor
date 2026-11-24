@@ -18,7 +18,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal($('#ask').disabled,false);
  const labs=vm.createContext({Math,rnd:(a,b)=>(a+b)/2,angDiff:(a,b)=>Math.abs(((a-b)%360+540)%360-180)});
  vm.runInContext(fs.readFileSync('web/js/uncertainty.js','utf8'),labs);
- for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['fiber','FB'],['polarization','PL'],['laser','LD'],['beam','BM'],['lens','LN'],['telescope','TS']]){
+ for(const [f,n] of [['michelson','MI'],['newton','NR'],['spectrometer','SP'],['prism','PM'],['fiber','FB'],['polarization','PL'],['laser','LD'],['beam','BM'],['lens','LN'],['telescope','TS']]){
   const internals={
    PL:'validExtinction,checkPlate,intensity',
    NR:'review,setRetake(levels){retake=levels},wedgeCalc,nx:()=>NX',
@@ -27,6 +27,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    BM:'erfFit,hyper,beam,wAt',
    LN:'sharpPos,trace',
    TS:'sp,Gp,Gc,Dp,lp,halfW,center',
+   PM:'trace,rhoMin,dmin,nOf,nrm,shift',
   };
   const exports=`return {s,init,calc${internals[n]?','+internals[n]:''}};`;
   vm.runInContext(fs.readFileSync('web/js/lab-'+f+'.js','utf8').replace('return {mount, render, key};',exports),labs);
@@ -40,6 +41,18 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert(Math.abs(vm.runInContext('MI.calc().mean',labs)-632.8)<1e-6);
  vm.runInContext(`const phi=Math.asin(546.1/(1e6/600))*180/Math.PI; SP.s.rows=[{n:1,k:1,L:180+phi,R:phi},{n:1,k:-1,L:180-phi,R:360-phi}]`,labs);
  assert(Math.abs(vm.runInContext('SP.calc().mean',labs)-1e6/600)<1e-6);
+ // v1.11.0：三棱镜——用理想读数反推出顶角、折射率和柯西系数
+ { const R=vm.runInContext('PM',labs), s=R.s; s.e=0;
+   const rd=th=>({L:s.Tz+th, R:s.Tz+th+180}), r0=R.rhoMin(), d=R.trace(546.1,r0).dev, sg=Math.sign(d);
+   assert(Math.abs(Math.abs(d)-R.dmin(546.1))<1e-6, 'trace at rhoMin should give δmin');
+   const A=f=>({t:'A',f,...rd(R.nrm(f)),rho:s.rho});
+   s.rows=[A(1),A(2),A(1),A(2),{t:'Z',...rd(0)},...[1,2,3].map(()=>({t:'D',w:546.1,...rd(d)})),...[404.7,435.8,577.0].map(w=>({t:'D',w,...rd(sg*R.dmin(w))}))];
+   const c=R.calc();
+   assert(Math.abs(c.sumA.mean-s.A)<1e-9 && Math.abs(c.n-R.nOf(546.1))<1e-9, `prism n ${c.n} vs ${R.nOf(546.1)}`);
+   assert(Math.abs(c.fit.a-s.ga)<1e-3 && Math.abs(c.fit.b*1e6-s.gb)/s.gb<0.05, `cauchy ${c.fit.a} ${c.fit.b}`);
+   assert(c.un>0 && c.un<5e-4 && c.fromA>0 && c.fromD>0);
+   s.rows[1]={...s.rows[1],rho:s.rho+1}; assert(R.calc().pairs[0].moved);
+   const sh=R.shift(2); assert(sh>1 && sh<20 && R.shift(0.5)<sh/10, 'quadratic shift '+sh); }
  const readings=(k,left,right)=>[
   {side:'L',k,x:left,off:0},
   {side:'R',k,x:right,off:0},
@@ -284,7 +297,7 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert.equal(MD.num(' 3.5 '),3.5); assert.equal(MD.num(''),null); assert(Number.isNaN(MD.num('3.5a'))); assert.equal(MD.num('－２'),-2);
  assert(Math.abs(MD.ang('164°31′')-(164+31/60))<1e-12 && Math.abs(MD.ang('164 31')-(164+31/60))<1e-12 && MD.ang('164.5')===164.5 && Number.isNaN(MD.ang('164°61′')));
  const fullExample=key=>{ const spec=MD.SPECS[key], s=MD.blank(spec); spec.groups.forEach(g=>{ g.example().forEach(v=>s.rows.push({g:g.id,v:v.map(String)})); if (g.exParams) s.prm[g.id]={...g.exParams}; }); return MD.compute(spec,s); };
- const expect={michelson:/λ = \(63[23]\.\d ± /, newton:/R = \(1\.0[456]\d ± /, grating:/d = \(166[67]\.\d ± /, fiber:/θ = \(77\.\d ± /, polar:/θ<sub>∥<\/sub> = \(23\.\d+ ± /, laser:/R = \(0\.42\d ± /, beam:/M² = \(1\.1[0-9]\d ± /, lens:/f = \(16[45]\.\d+ ± /, telescope:/Γ比 = \(13\.\d+ ± /};
+ const expect={michelson:/λ = \(63[23]\.\d ± /, newton:/R = \(1\.0[456]\d ± /, grating:/d = \(166[67]\.\d ± /, fiber:/θ = \(77\.\d ± /, polar:/θ<sub>∥<\/sub> = \(23\.\d+ ± /, laser:/R = \(0\.42\d ± /, beam:/M² = \(1\.1[0-9]\d ± /, lens:/f = \(16[45]\.\d+ ± /, telescope:/Γ比 = \(13\.\d+ ± /, prism:/n = \(1\.66\d+ ± /};
  for (const key of MD.KEYS){ const res=fullExample(key);
    assert(res.ok && res.entered && res.prmOk, key+' example should compute');
    assert.deepEqual(res.issues,[], key+' example has issues: '+res.issues.join('；'));
@@ -313,5 +326,5 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    const is=MD.compute(spec,s).issues.filter(x=>x.startsWith('读数位数')); assert(is.length===2 && /第 2 行少了估读位/.test(is[0]) && /第 3 行记到了/.test(is[1]), is.join(';')); }
  // 位置太集中的光束数据不能给出可信的 M²
  { const h=MD.hyperFit([115,120,125,130,135],[0.4321,0.4330,0.4336,0.4347,0.4352],632.8e-6); assert(h.invalid || !h.reliable); }
- console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all nine experiments, telescope finite-distance corrections, lens ray tracing).');
+ console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all ten experiments, prism minimum deviation, telescope finite-distance corrections, lens ray tracing).');
 })().catch(e=>{console.error(e);process.exitCode=1});

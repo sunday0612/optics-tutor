@@ -1,5 +1,5 @@
 /* =====================================================================
- * models3d.js —— 九个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
+ * models3d.js —— 十个实验的三维器材模型（单位：cm，尺寸参照实验室常见型号）
  *   迈克尔逊干涉仪（WSM 型）、读数显微镜 + 牛顿环装置（JCD 型）、分光计（JJY 型）、光纤耦合与弯曲损耗、偏振（马吕斯定律与波片）、望远镜、半导体激光器与光电二极管、刀口法测光束、光具座测焦距
  * 每个模型返回 update()，在实验状态变化时调用：部件会跟着操作移动或转动。
  * 观察者默认站在 −z 一侧（“前方”）。
@@ -232,7 +232,7 @@ const Models3D = (() => {
   /* =================================================================
    * 3. 分光计
    * ================================================================= */
-  function spectrometer(v, S){
+  function spectrometer(v, S, pm=false){
     const R=v.root, Y=17.4;
     table(R);
     R.add(shadow(30,30,0,0), shadow(8,8,-31,0));
@@ -255,6 +255,9 @@ const Models3D = (() => {
     R.add(stage);
     const grat=new Node().at(0,0,0);
     grat.add(boxN(1.2,0.6,4.6,MAT.anod,0,16.1,0), N(box(0.3,3.6,4),mat({color:'#e4dcff',spec:1,shin:150,opacity:0.42})).at(0,Y,0), boxN(0.6,3.8,0.5,MAT.anod,0,Y,2.2), boxN(0.6,3.8,0.5,MAT.anod,0,Y,-2.2));
+    if (pm){ grat.children.length=0;                                  // 三棱镜：顶点朝局部 +x，顶角取当前的 A
+      grat.add(boxN(1.2,0.6,4.6,MAT.anod,0,16.1,0)); const A=(S().A||60)*PI/180, L=4.6, ax=L*Math.cos(A/2)*2/3, bx=ax-L*Math.cos(A/2), bz=L*Math.sin(A/2);
+      const tri=triPrism([[ax,0],[bx,bz],[bx,-bz]],3.8); grat.add(N(tri,mat({color:'#d6e8ff',spec:1,shin:150,opacity:0.45})).at(0,Y,0)); }
     R.add(grat);
     /* 平行光管（固定）、狭缝、汞灯 */
     const col=new Node();
@@ -271,7 +274,7 @@ const Models3D = (() => {
     /* 衍射光束 */
     const LINES=[[404.7,.45],[435.8,.7],[546.1,1],[577.0,.75],[579.1,.75]], beams=[];
     const zero=new Node(); zero.add(beam(MAT.white,0.12)); setBeam(zero.children[0],[0.3,Y,0],[22,Y,0]); R.add(zero);
-    for (const [w,a] of LINES) for (const k of [1,-1,2,-2]){ const n=new Node(), c=wl2rgb(w);
+    for (const [w,a] of LINES) for (const k of (pm?[1]:[1,-1,2,-2])){ const n=new Node(), c=wl2rgb(w);
       const b=beam(mat({color:'#'+c.map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''),unlit:true,opacity:a*(Math.abs(k)===2?0.3:0.75),additive:true}),0.07);
       setBeam(b,[0.3,Y,0],[22,Y,0]); n.add(b); R.add(n); beams.push({n,w,k}); }
     /* 望远镜（随读数转动） */
@@ -284,19 +287,31 @@ const Models3D = (() => {
     R.add(tel);
     /* 标注 */
     const L=(t,n,o)=>v.label(t,n,o);
-    L('汞灯',hg.children[2],[0,5.5,0]); L('狭缝',col.children[6],[0,2.4,0]); L('平行光管',col.children[3],[0,2.4,0]); L('光栅',grat.children[1],[0,2.8,0]);
+    L('汞灯',hg.children[2],[0,5.5,0]); L('狭缝',col.children[6],[0,2.4,0]); L('平行光管',col.children[3],[0,2.4,0]); L(pm?'三棱镜':'光栅',grat.children[1],[0,2.8,0]);
     L('载物台',stage.children[0],[0,0,-5]); L('望远镜',tel.children[3],[0,2.4,0]); L('目镜',eyeT,[0,0,0]); L('刻度盘',dialN.children[0],[0,0,-10.5]);
     vern.forEach(([g,name])=>L(name,g.children[0],[0,1.6,0]));
     return function update(){
       const s=S();
       tel.rot=[0,-rad(s.T-s.Tz),0];
       dialN.rot=[0,rad(s.left-270),0];
-      grat.rot=[0,-rad(s.i*2),0];
+      if (pm){ grat.visible=s.on; grat.rot=[0,-rad(s.rho),0]; zero.visible=!s.on; } else grat.rot=[0,-rad(s.i*2),0];
       for (const b of beams){ const t=s.lineT(b.k,b.w); b.n.visible=t!=null; if (t!=null) b.n.rot=[0,-rad(t-s.Tz),0]; }
       gaussLamp.visible=s.view==='auto';
     };
   }
   spectrometer.camera={target:[0,12,0], dist:92, theta:-1.0, phi:0.98, minDist:22, maxDist:200};
+  const prismSpec=(v,S)=>spectrometer(v,S,true); prismSpec.camera=spectrometer.camera;
+  /* 直三棱柱：pts 为 xz 平面内的三个顶点，高 h（沿 y） */
+  function triPrism(pts, h){
+    const g={p:[],n:[],u:[],i:[]}, cx=(pts[0][0]+pts[1][0]+pts[2][0])/3, cz=(pts[0][1]+pts[1][1]+pts[2][1])/3;
+    const face=(vs,n)=>{ const b=g.p.length/3; vs.forEach((q,k)=>{ g.p.push(...q); g.n.push(...n); g.u.push(k%2,k>1?1:0); });
+      for (let k=1;k<vs.length-1;k++) g.i.push(b,b+k,b+k+1, b,b+k+1,b+k); };
+    for (let k=0;k<3;k++){ const [x0,z0]=pts[k], [x1,z1]=pts[(k+1)%3]; let nx=z1-z0, nz=-(x1-x0); const l=Math.hypot(nx,nz);
+      if (nx*((x0+x1)/2-cx)+nz*((z0+z1)/2-cz)<0){ nx=-nx; nz=-nz; }
+      face([[x0,-h/2,z0],[x1,-h/2,z1],[x1,h/2,z1],[x0,h/2,z0]],[nx/l,0,nz/l]); }
+    face(pts.map(([x,z])=>[x,h/2,z]),[0,1,0]); face(pts.map(([x,z])=>[x,-h/2,z]),[0,-1,0]);
+    return g;
+  }
 
   /* =================================================================
    * 4. 光纤耦合与弯曲损耗
@@ -656,5 +671,5 @@ const Models3D = (() => {
   }
   telescopeLab.camera={target:[-8,16,0], dist:110, theta:1.25, phi:1.05, minDist:20, maxDist:260};
 
-  return {michelson, newton, spectrometer, fiber, polarization, laser, beam:beamLab, lens:lensLab, telescope:telescopeLab};
+  return {michelson, newton, spectrometer, prism:prismSpec, fiber, polarization, laser, beam:beamLab, lens:lensLab, telescope:telescopeLab};
 })();

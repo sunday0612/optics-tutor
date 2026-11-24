@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.11.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -319,7 +319,7 @@ async function runReview(p, {check, prompt, offline}){
     const snapshotPrompt=prompt(), fallback=offline();
     await AI.ready;
     let text='', note='';
-    if(AI.online()) { try { text=await aiText(snapshotPrompt); } catch(e){ note=aiErrorNote(e); } }
+    if(AI.online()) { try { text=typeof Learn!=='undefined'?await Learn.reviewText(p, box, snapshotPrompt):await aiText(snapshotPrompt); } catch(e){ note=aiErrorNote(e); } }
     else note='离线演示模式：下面是内置规则给出的批改意见。';
     if(!text) text=fallback;
     box.innerHTML=paras(text)+(note?`<div class="note">${esc(note)}</div>`:'');

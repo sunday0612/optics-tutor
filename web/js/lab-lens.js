@@ -269,15 +269,16 @@ const LN = (() => {
     if (b.items.length&&b.items.length<3) p.push(`二次成像法只测了 ${b.items.length} 个 D，建议 3 个以上`);
     const loose=s.rows.filter(r=>Math.abs(r.off)>3);
     if (loose.length) p.push(`${loose.length} 次记录离真正最清晰的位置超过 3 mm（${loose.map(r=>`${r.t==='b'?`屏 ${r.xs} ${r.big?'大像':'小像'}`:`自准${r.rev?'反向':'正向'}`} 偏 ${r.off} mm`).join('，')}）`);
-    const near=b.items.filter(x=>x.D<4.6*s.f);
-    if (near.length) p.push(`D = ${near.map(x=>x.D).join('、')} mm 离 4f 太近，两个清晰位置靠得很近，d 的相对误差大`);
+    const near=b.items.filter(x=>x.D<4.08*s.f), far=b.items.filter(x=>x.D>7*s.f);
+    if (near.length) p.push(`D = ${near.map(x=>x.D).join('、')} mm 几乎等于 4f，两个清晰位置的“清晰范围”接近重叠，不容易分辨`);
+    if (far.length) p.push(`D = ${far.map(x=>x.D).join('、')} mm 比 4f 大得多，f 对两个位置的读数更敏感，小像也太小，不确定度反而增大`);
     if ((a.n1&&!a.n2)||(!a.n1&&a.n2)) p.push('自准法只测了一个方向，没有消去透镜架读数指标的偏差');
     if (!b.items.length) p.push('还没有完成二次成像法');
     const t1=b.sum?`二次成像法 f = ${Unc.format(b.mean,b.sum.u,'mm').text}，相对误差 ${b.err.toFixed(2)}%。`:'', t2=a.mean!=null?`自准法 f = ${a.mean.toFixed(1)} mm，相对误差 ${a.err.toFixed(2)}%，正反两次相差 ${Math.abs(2*a.delta).toFixed(1)} mm，说明读数指标与主面偏差约 ${Math.abs(a.delta).toFixed(1)} mm。`:'';
     return [`【总评】透镜真实焦距 ${s.f.toFixed(1)} mm。${t1}${t2}`,
       '【数据问题】'+(p.length?p.join('；')+'。':'没有发现明显问题。'),
       '【误差来源】判断像最清晰的位置有一定范围（景深），这是主要误差；导轨读数误差；物、透镜、屏不共轴时像会变形、清晰位置不好判断；透镜有厚度、主面不在读数指标处（二次成像法能消去，自准法要正反各测一次）。',
-      '【改进建议】用左右逼近法：从两侧分别移到刚好清晰的位置取平均；二次成像法的 D 取 4f 的 1.2～2 倍，换 3～5 个 D；自准法正反各测几次取平均；先做好共轴调节。'].join('\n');
+      '【改进建议】用左右逼近法：从两侧分别移到刚好清晰的位置取平均；二次成像法的 D 取略大于 4f（约 4.2f～5f），既能分清两个清晰位置，f 的不确定度又小，换 3～5 个 D；自准法正反各测几次取平均；先做好共轴调节。'].join('\n');
   }
   function review(){
     const c=calc();
@@ -291,6 +292,31 @@ const LN = (() => {
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  /* 方案优化：二次成像法 D 取多大时 f 的不确定度最小 */
+  const uR=Math.SQRT2*INST/Unc.SQRT3;
+  function ufOf(r, f, judge){                           // r = D/f；judge：再计入判断“最清晰”的误差
+    const D=r*f, d=Math.sqrt(Math.max(0,D*D-4*D*f)), a=(D*D+d*d)/(4*D*D), b=d/(2*D); let ud2=uR*uR;
+    if (judge) for (const u of [(D-d)/2,(D+d)/2]){ const v=D-u, m=v/u, h=0.35*v/(AP*Math.abs(m*m-1)); ud2+=(h/Unc.SQRT3)**2; }
+    return Math.sqrt((a*uR)**2+b*b*ud2);
+  }
+  function rMin(f){ for (let r=4.0005;r<5;r+=0.0005){ const D=r*f, d=Math.sqrt(D*D-4*D*f); let hs=0; for (const u of [(D-d)/2,(D+d)/2]){ const v=D-u, m=v/u; hs+=0.35*v/(AP*Math.abs(m*m-1)); } if (d>2*hs) return r; } return 5; }
+  typeof Learn!=='undefined' && Learn.design(P,{title:'二次成像法的物屏距离 D 取多大最好',
+    text:`二次成像法 f = (D² − d²)/(4D)。D 和 d 都是两个导轨读数之差，标准不确定度都是 u = √2·Δ<sub>仪</sub>/√3 = ${uR.toFixed(2)} mm。<b>先推导</b> u<sub>f</sub> 随 D 怎样变化（提示：令 t = f/D，可以化成 u<sub>f</sub> = u·√(t² − 2t + 1/2)），再回答：`,
+    fields:[
+      {k:'r1', label:'只考虑读数误差时，D 越接近几倍 f，u<sub>f</sub> 越小？', unit:'倍', answer:()=>4, tol:()=>0.1, hint:'看 t = f/D 取最大值 1/4 时'},
+      {k:'r2', label:'只考虑读数误差，D 从 4.2f 增大到 8f，u<sub>f</sub> 变为原来的几倍？', unit:'倍', answer:()=>ufOf(8,1,false)/ufOf(4.2,1,false), tol:()=>0.06, hint:'分别代入 t = 1/4.2 和 t = 1/8'}],
+    reveal:()=>{ const f=s.f, r0=rMin(f); return `只看读数误差，D → 4f 时 u<sub>f</sub> → u/4 最小：此时 d 很小，而 ∂f/∂d = −d/(2D) 也很小，d 的误差几乎不影响 f；D 很大时 u<sub>f</sub> → u/√2。但 D 太接近 4f 时，大像、小像两个位置靠得太近，各自的“清晰范围”（透镜移动 Δ 时离焦量为 Δ·|m² − 1|，m 接近 1 时很不敏感）会重叠，分不清两次成像；按本仿真的透镜，D 至少约 ${r0.toFixed(2)}f。所以 D <b>略大于 4f</b>（约 4.2f～5f）最好。下图是两种模型下 u<sub>f</sub> 随 D/f 的变化，圆点是你在不同 D 下测得的 f 与平均值之差，可以在仿真里换几个 D 验证。`; },
+    draw:function dd(cv){ const f=s.f, rs=[...Array(120)].map((_,i)=>4.02+i*0.05), c=calc().bessel, mean=c.items.length?Unc.mean(c.items.map(x=>x.f)):null;
+      const curve=j=>rs.map(r=>[r,ufOf(r,f,j)]), pts=c.items.map(x=>[x.D/f, Math.abs(x.f-mean)]);
+      if (!cv.clientWidth) return whenVisible(cv,()=>dd(cv));
+      const {ctx,dpr,W,H}=setup(cv,190); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+      const all=[...curve(false),...curve(true),...pts], ymax=Math.max(...all.map(p=>p[1]))*1.1, L=44, R=W-10, T=12, B=H-26, X=r=>L+(r-4)/(10-4)*(R-L), Y=v=>B-v/ymax*(B-T);
+      ctx.strokeStyle='#ccc'; ctx.beginPath(); ctx.moveTo(L,T); ctx.lineTo(L,B); ctx.lineTo(R,B); ctx.stroke();
+      ctx.fillStyle='#5b616a'; ctx.font='11px "PingFang SC","Microsoft YaHei UI","Noto Sans SC",sans-serif'; ctx.textAlign='center'; for (let r=4;r<=10;r++) ctx.fillText(r+'f',X(r),B+14);
+      ctx.textAlign='right'; for (let k=0;k<=4;k++){ const v=ymax*k/4; ctx.fillText(v.toFixed(2),L-4,Y(v)+4); }
+      [[false,'#4E4486','只计读数误差'],[true,'#d08a3c','再计入判断清晰的误差']].forEach(([j,c2,t],n)=>{ ctx.strokeStyle=c2; ctx.lineWidth=1.6; ctx.beginPath(); curve(j).forEach(([r,v],i)=>i?ctx.lineTo(X(r),Y(v)):ctx.moveTo(X(r),Y(v))); ctx.stroke(); ctx.fillStyle=c2; ctx.textAlign='left'; ctx.fillText(t,L+8,T+12+n*14); });
+      ctx.fillStyle='#1d1e21'; pts.forEach(([r,v])=>{ if (r<10){ ctx.beginPath(); ctx.arc(X(r),Y(v),3,0,Math.PI*2); ctx.fill(); } });
+      ctx.textAlign='left'; ctx.fillStyle='#5b616a'; ctx.fillText('纵轴：u_f / mm（圆点为 |f − f̄|）　横轴：D',L+8,H-2); }});
   typeof Learn!=='undefined' && Learn.task(P,{title:'透镜架读数指标的偏差', label:'偏差 δ', unit:'mm',
     text:'透镜架上的读数指标不一定正好在透镜主面处。<b>用你的数据</b>：由自准法正向、反向两次的焦距 f₁、f₂，算出读数指标与主面的偏差 δ = |f₂ − f₁|/2。',
     ready:()=>calc().auto.mean!=null, need:'先用自准法正向、反向各测一次。', hint:'正反两次的差值的一半。',

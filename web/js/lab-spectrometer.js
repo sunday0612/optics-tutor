@@ -219,7 +219,7 @@ const SP = (() => {
       msg.textContent = near.length ? '' : '视场里没有谱线，继续转动望远镜';
       if ($('#'+P+'-assist').checked && near.length){ ctr.textContent='视场内：'+near.join('、'); ctr.hidden=false; } else ctr.hidden=true;
     }
-    ctx.restore();
+    ctx.restore(); msg.classList.toggle('low', s.view==='auto');
     for (let q=0;q<=(blur?3:0);q++){ ctx.strokeStyle=`rgba(255,255,255,${q?0.18/(1+blur*0.2):blur?Math.max(0.12,0.75/(1+blur*0.5)):0.75})`; ctx.lineWidth=1+q*blur*0.8;
       ctx.beginPath(); ctx.moveTo(S/2,6); ctx.lineTo(S/2,S-6); ctx.moveTo(S*0.15,S/2); ctx.lineTo(S*0.85,S/2); ctx.moveTo(S*0.3,S*0.3); ctx.lineTo(S*0.7,S*0.3); ctx.stroke(); }
     $('#'+P+'-cap').textContent = s.view==='auto' ? `望远镜视场：${X.adj&&X.sub!=='grat'?SUBS.find(x=>x[0]===X.sub)[1]:'光栅自准直'}` : '望远镜视场：汞灯光谱';
