@@ -86,13 +86,14 @@ const Learn = (() => {
   }
   function onSelfClick(e){
     const box=e.target.closest('.selfcalc'); if (!box) return; const P=box.id.slice(0,-5);
-    if (e.target.closest('[data-sc-skip]')){ const sc=scState(P); sc.skip=quantities(P).map(q=>q.id+'='+q.sig).join(';'); persist(P); renderSelf(P); logEvent('selfcalc_skip',{lab:P}); return; }
+    if (e.target.closest('[data-sc-skip]')){ const sc=scState(P); sc.skip=quantities(P).map(q=>q.id+'='+q.sig).join(';'); persist(P); renderSelf(P); logEvent('selfcalc_skip',{lab:P}); document.dispatchEvent(new CustomEvent('learnchange',{detail:P})); return; }
     const b=e.target.closest('[data-sc-check]'); if (!b) return;
     const q=quantities(P).find(x=>x.id===b.dataset.scCheck); if (!q) return;
     const sc=scState(P), st=sc.q[q.id]&&sc.q[q.id].sig===q.sig?sc.q[q.id]:(sc.q[q.id]={sig:q.sig, tries:0, in:sc.q[q.id]?.in||{}});
     box.querySelectorAll(`input[data-q="${CSS.escape(q.id)}"]`).forEach(i=>{ st.in[i.dataset.k]=i.value; });
     const c=check(q, st.in); st.tries++; st.last=c.r; st.hint=c.hint; if (c.pass) st.pass=q.sig;
     persist(P); renderSelf(P); logEvent('selfcalc_check',{lab:P, q:q.sym, pass:c.pass, tries:st.tries});
+    document.dispatchEvent(new CustomEvent('learnchange',{detail:P}));
   }
   document.addEventListener('click', onSelfClick);
   document.addEventListener('keydown', e=>{ if (e.key==='Enter' && e.target.closest?.('.selfcalc input')){ e.preventDefault(); e.target.closest('.sc-q')?.querySelector('[data-sc-check]')?.click(); } });
@@ -192,5 +193,7 @@ const Learn = (() => {
     return blocks;
   }
 
-  return {ready, prefs:()=>prefs, savePrefs, setPrefs, attach, task, gate, rerender, reportBlocks, quantities, check, POE, TASKS};
+  /* 结果是否已经可以看（算对了、跳过了，或不使用“我先算”） */
+  function selfDone(P){ if (prefs.calc==='show') return true; const l=quantities(P); return l.length>0 && visible(P,l); }
+  return {ready, prefs:()=>prefs, selfDone, savePrefs, setPrefs, attach, task, gate, rerender, reportBlocks, quantities, check, POE, TASKS};
 })();

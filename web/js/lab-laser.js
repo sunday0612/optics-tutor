@@ -147,7 +147,7 @@ const LD = (() => {
     ctx.textAlign='left'; ctx.fillStyle='#8a9099'; ctx.fillText(`${s.Ts} °C 已记录的 P-I 点（横轴 mA，纵轴 mW；虚线为额定功率）`,x0+4,y1-8);
     const msg=$('#'+P+'-msg');
     msg.textContent = p>PMAX ? `输出 ${p.toFixed(2)} mW，超过额定功率 ${PMAX} mW！请立即减小电流` : !settled() ? `TEC 正在把温度调到 ${s.Ts} °C，等稳定后再记录` : '';
-    msg.style.top='14%'; msg.style.color=p>PMAX?'#ff8a7a':'#fff';
+    msg.style.top='50%'; msg.style.color=p>PMAX?'#ff8a7a':'#fff';
     $('#'+P+'-counter').hidden=true;
   }
 

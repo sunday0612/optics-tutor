@@ -198,7 +198,7 @@ const LN = (() => {
       const sharp=im.real&&im.blur<0.35, big=im.real&&im.m>1;
       $('#'+P+'-cap').textContent='像屏（十字为物的中心轴）';
       msg.textContent = !im.real ? '屏上没有实像：透镜离物太近' : sharp ? (s.mode==='align' ? `清晰的${big?'大':'小'}像：像中心偏离十字 ${Math.hypot(im.cx,im.cy).toFixed(1)} mm` : `清晰的${big?'大':'小'}像`) : '';
-      msg.style.top='3%';
+      msg.style.top='10%';
     }
     $('#'+P+'-counter').hidden=true;
   }

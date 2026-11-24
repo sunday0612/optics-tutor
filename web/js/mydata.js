@@ -818,7 +818,8 @@ const MyData = (() => {
     renderSteps(P, [
       [res.entered && res.prmOk, `<b>选择内容、核对参数</b>：右边选择要处理的实验内容（${spec.groups.map(g => g.name).join('、')}），按你的实验条件修改参数，如波长、仪器误差限。`],
       [res.entered, '<b>录入数据</b>：照实验记录本把原始读数填进右边的表格，也可以从 Excel / WPS 复制粘贴。不会填时，点“填入示例数据”看看格式。'],
-      [res.ok, '<b>查看结果</b>：左边会自动给出数据表、逐差或拟合结果、不确定度，并列出程序检查发现的问题。'],
+      Learn.prefs().calc==='show' ? [res.ok, '<b>查看结果</b>：左边会给出逐差或拟合结果、不确定度，并列出程序检查发现的问题。']
+        : [res.ok && Learn.selfDone(P), '<b>自己算、再核对</b>：在“我先算”里用自己的数据算出结果和不确定度，核对通过（或跳过）后显示程序的结果。'],
       [s.checked, '<b>AI 助教检查</b>：让 AI 根据你的数据指出问题、分析误差来源，然后导出实验报告。']]);
     return res;
   }
@@ -846,7 +847,7 @@ const MyData = (() => {
         if (rows.some(r => r.v.some(v => String(v).trim())) && !confirm(`用示例数据替换“${g.name}”现有的数据？`)) return;
         s.rows = s.rows.filter(r => r.g !== g.id).concat(g.example().map(v => ({g: g.id, v: v.map(String), x: v.map(() => 1)})));
         if (g.exParams){ s.prm[g.id] = {...(s.prm[g.id] || {}), ...g.exParams}; }
-        drawEntry(spec); changed(true);
+        drawEntry(spec); changed(true); ud.closest('.ud-card').scrollTop = 0;
         $('#' + P + '-save-status').textContent = '已填入示例数据（模拟生成，仅用于熟悉格式和流程）。';
       }
     });
@@ -902,5 +903,6 @@ ${res.ai.join('\n')}
   }
 
   const KEYS = Object.keys(SPECS);
+  if (typeof document !== 'undefined') document.addEventListener('learnchange', e => { const key = KEYS.find(k => SPECS[k].P === e.detail); if (key && S[key]) refresh(SPECS[key]); });
   return {SPECS, KEYS, mount: (key, el) => mount(key, el), render: key => { const spec = SPECS[key]; if (S[key]) { refresh(spec); } }, parse, compute, num, ang, hyperFit, linfit, blank, provenance};
 })();
