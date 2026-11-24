@@ -291,5 +291,10 @@ const LN = (() => {
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'透镜架读数指标的偏差', label:'偏差 δ', unit:'mm',
+    text:'透镜架上的读数指标不一定正好在透镜主面处。<b>用你的数据</b>：由自准法正向、反向两次的焦距 f₁、f₂，算出读数指标与主面的偏差 δ = |f₂ − f₁|/2。',
+    ready:()=>calc().auto.mean!=null, need:'先用自准法正向、反向各测一次。', hint:'正反两次的差值的一半。',
+    answer:()=>Math.abs(calc().auto.delta), tol:()=>0.15,
+    reveal:()=>`读数指标与主面实际相差 ${Math.abs(s.dl).toFixed(2)} mm。自准法只测一个方向，f 就会差这么多；二次成像法只用到两个透镜位置的差 d，这个偏差自动抵消。`});
   return {mount, render, key};
 })();

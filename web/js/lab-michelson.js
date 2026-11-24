@@ -341,5 +341,10 @@ ${na?naText():'学生没有做钠光双线部分。'}
       offline:()=>offline(c, na)
     }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'鼓轮的回程差', label:'回程差', unit:'mm',
+    text:'读数鼓轮的螺杆和螺母之间有间隙。<b>测一测</b>：先沿一个方向转动鼓轮，让圆环稳定地冒出（或缩进）；然后反向转动，记下从开始反向到圆环重新开始移动时，鼓轮读数变化了多少。',
+    ready:()=>s.aligned, need:'先完成调节（看到圆形干涉环）再做。', hint:'反向前后两次读数之差；鼓轮一格 0.0001 mm。',
+    answer:()=>BACKLASH, tol:a=>a*0.4,
+    reveal:()=>`这台仪器的回程差约 ${BACKLASH} mm，相当于 ${(2*BACKLASH/632.8e-6).toFixed(0)} 个环。中途反向时读数变了而 M₁ 没动，算出的 λ 会偏大。所以测量必须沿同一方向转动鼓轮，开始记录前先朝测量方向空转一段，消除间隙。${s.reversals?`你这次测量中反向了 ${s.reversals} 次。`:''}`});
   return {mount, render, key};
 })();

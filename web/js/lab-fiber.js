@@ -378,5 +378,10 @@ ${c.far&&c.far.mfd?`选做远场：${s.rows.filter(r=>r.t==='far').map(r=>`L=${r
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'光纤端面不在刻度零点', label:'偏移 ΔL', unit:'mm',
+    text:'远场测量时，导轨读数 L 的零点不一定正好是光纤出射端面。<b>用你的数据</b>：对光斑半径 r 和 L 作直线拟合 r = a + θL，端面相对刻度零点的偏移 ΔL = a/θ。',
+    ready:()=>{ const f=calc().far; return !!(f&&f.th>0); }, need:'先在至少两个位置测远场光斑半径。', hint:'截距 a 除以斜率 θ；为正表示端面在刻度零点之前。',
+    answer:()=>calc().far.delta, tol:a=>Math.max(0.05,Math.abs(a)*0.02),
+    reveal:()=>`端面实际偏离刻度零点 ${s.dl.toFixed(2)} mm。用两点或直线拟合的斜率求发散角，这个偏移只影响截距，不影响 θ；如果只用一个位置 θ ≈ r/L，就会带进 ΔL/L 的系统误差（L = 30 mm 时约 ${(s.dl/30*100).toFixed(1)}%）。`});
   return {mount, render, key};
 })();

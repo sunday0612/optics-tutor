@@ -403,5 +403,10 @@ const PL = (() => {
       controls.forEach(b=>b.disabled=false);
     }
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'单点找消光位置的误差', label:'θ最暗 − θ⊥', unit:'°',
+    text:'很多同学直接把光强最小的那次读数当作正交消光的位置。<b>用你的数据</b>：找出马吕斯定律记录中光强最小那一点的角度 θ最暗，和拟合得到的正交位置 θ⊥ = θ∥ + 90° 相比，算出 θ最暗 − θ⊥（化到 −90°～90°）。',
+    ready:()=>!!malus(), need:'先完成马吕斯定律的测量和拟合（至少 8 个点、覆盖半圈）。', hint:'θ⊥ = θ∥ + 90°；差值超过 90° 时减去 180°。',
+    answer:()=>{ const m=malus(), r=s.rows.filter(x=>x.t==='m').reduce((a,b)=>b.I<a.I?b:a); return norm90(r.th-(m.par+90)); }, tol:()=>0.05,
+    reveal:()=>{ const m=malus(); return `消光附近光强随角度变化很慢（cos² 在极小值处的斜率为 0），单点判断的误差可以有好几度；拟合用到了所有点，θ∥ 的不确定度只有 ${m.u.toFixed(2)}°。检偏器转盘的零点与透振方向实际相差 ${s.t0.toFixed(2)}°（对 180° 取模）。`; }});
   return {mount, render, key};
 })();

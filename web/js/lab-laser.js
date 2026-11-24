@@ -279,5 +279,10 @@ ${c.pd?`光电二极管：暗电流 ${c.pd.dark!=null?c.pd.dark.toFixed(4)+' µA
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'暗电流对响应度的影响', label:'偏大', unit:'%',
+    text:'光电二极管没有光照时也有很小的暗电流。<b>用你的数据</b>：在功率最小的那组数据上，不扣暗电流直接算 R′ = I<sub>ph</sub>/P，再和扣除暗电流后的 R 相比，R′ 偏大百分之多少？',
+    ready:()=>{ const p=calc().pd; return !!(p&&p.dark!=null&&p.pairs.length); }, need:'先测暗电流（关闭快门）和至少一组功率—光电流数据。', hint:'(R′ − R)/R × 100%，R = (I − I_暗)/P。',
+    answer:()=>{ const x=calc().pd.pairs[0]; return (x.raw-x.R)/x.R*100; }, tol:a=>Math.max(0.2,Math.abs(a)*0.03),
+    reveal:()=>`暗电流约 ${s.dark.toFixed(2)} µA。它是一个固定的附加量，入射功率越小，所占比例越大；所以响应度应扣除暗电流，或者用 I–P 直线的斜率（截距吸收了暗电流）。`});
   return {mount, render, key};
 })();

@@ -17,7 +17,8 @@ const Settings = (() => {
   async function open(){
     lastFocus=document.activeElement; box.hidden=false; status('');
     const disabled = !AI.backend;
-    ['#apiKey','#apiModel','#saveKey','#openData','#refreshUsage'].forEach(s=>$(s).disabled=disabled);
+    ['#apiKey','#apiModel','#saveKey','#openData','#refreshUsage','#savePrefs','#prefCalc','#prefTA','#prefK','#prefSig','#prefRound'].forEach(s=>$(s).disabled=disabled);
+    const p=Learn.prefs(); $('#prefCalc').value=p.calc; $('#prefTA').value=p.tA; $('#prefK').value=String(p.k); $('#prefSig').value=p.sig; $('#prefRound').value=p.round; $('#prefStatus').textContent='';
     if (disabled){
       $('#keyHint').textContent='当前是预览版，设置只在桌面软件中可用。';
       $('#usage').innerHTML='<dt>预览版不记录使用数据</dt><dd></dd>';
@@ -56,6 +57,12 @@ const Settings = (() => {
     } catch(e){ $('#usage').innerHTML=`<dt>读取失败：${esc(e.message)}</dt><dd></dd>`; }
   }
 
+  $('#savePrefs').onclick=async()=>{
+    const el=$('#prefStatus'); el.className='kstatus'; el.textContent='正在保存…';
+    try { await Learn.savePrefs({calc:$('#prefCalc').value, tA:$('#prefTA').value, k:+$('#prefK').value, sig:$('#prefSig').value, round:$('#prefRound').value});
+      el.textContent='已保存，正在按新设置重新计算…'; el.className='kstatus ok'; setTimeout(()=>location.reload(),400); }
+    catch(e){ el.textContent=e.message; el.className='kstatus bad'; }
+  };
   $('#openSettings').onclick=open;
   $('#closeSettings').onclick=close;
   box.addEventListener('click',e=>{ if (e.target===box) close(); });

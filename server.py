@@ -7,6 +7,7 @@
 3. /api/settings  读取 / 保存 API Key 和模型；/api/test 测试连接
 4. /api/log       记录使用数据；/api/stats 汇总；/api/open-data 打开数据文件夹
 5. /api/report    生成实验报告（Word / 网页），/api/open-reports 打开报告文件夹，/api/report-who 记住报告上的姓名、学号、班级
+6. /api/prefs     教学设置（不确定度约定、“我先算”的方式）
 
 只用 Python 标准库。开发时也可以单独运行：python server.py，再用浏览器打开显示的地址。
 """
@@ -27,7 +28,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import report
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.10.0"
 
 
 # ---------------- 路径 ----------------
@@ -69,6 +70,9 @@ SESSION_TOKEN = secrets.token_urlsafe(32)
 DATA_LOCK = threading.RLock()
 LAB_FILE = os.path.join(DATA_DIR, "lab_sessions.json")
 WHO_FILE = os.path.join(DATA_DIR, "report_who.json")   # 导出报告时填写的姓名、学号、班级
+PREFS_FILE = os.path.join(DATA_DIR, "teaching.json")    # 教学设置：不确定度约定、“我先算”的方式
+PREFS_OPTIONS = {"calc": ("try", "must", "show"), "tA": ("none", "t68"), "k": (1, 2), "sig": ("auto", "1", "2"), "round": ("up", "half")}
+PREFS_DEFAULT = {"calc": "try", "tA": "none", "k": 1, "sig": "auto", "round": "up"}
 LAB_ROW_LIMIT = {"bm": 1500}                           # 每个实验最多保存的记录条数；刀口扫描每次 30 点，单独放宽
 WHO_KEYS = ("name", "sid", "cls")
 
@@ -265,6 +269,32 @@ def save_lab(lab, state):
         os.replace(temp, LAB_FILE)
 
 
+def load_prefs():
+    try:
+        with open(PREFS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return {k: data[k] if data.get(k) in PREFS_OPTIONS[k] else PREFS_DEFAULT[k] for k in PREFS_OPTIONS}
+
+
+def save_prefs(req):
+    prefs = load_prefs()
+    for k, opts in PREFS_OPTIONS.items():
+        if k in req:
+            if req[k] not in opts:
+                raise ValueError("教学设置 %s 的取值不正确" % k)
+            prefs[k] = req[k]
+    with DATA_LOCK:
+        temp = PREFS_FILE + ".tmp"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, ensure_ascii=False)
+        os.replace(temp, PREFS_FILE)
+    return prefs
+
+
 def load_who():
     try:
         with open(WHO_FILE, encoding="utf-8") as f:
@@ -340,6 +370,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(summary())
         if path == "/api/report-who":
             return self.send_json(load_who())
+        if path == "/api/prefs":
+            return self.send_json(load_prefs())
         return super().do_GET()
 
     def do_POST(self):
@@ -380,6 +412,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"ok": True})
         if self.path == "/api/report":
             return self.send_json(*save_report(req))
+        if self.path == "/api/prefs":
+            try:
+                return self.send_json({"ok": True, "prefs": save_prefs(req)})
+            except ValueError as e:
+                return self.send_json({"error": str(e)}, 400)
         if self.path == "/api/report-who":
             try:
                 return self.send_json({"ok": True, "who": save_who(req)})

@@ -3,7 +3,7 @@
  * 所有 js 文件按顺序加载，顶层声明的函数和常量可以互相使用。
  * ===================================================================== */
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -89,6 +89,7 @@ aiDetect();
 const LabStore = {
   data:{}, queue:Promise.resolve(), failed:false,
   sent:{},                                   // 每个实验最近一次保存（或读入）的内容，没有变化就不重复保存
+  extra:{},                                  // 学习过程（我先算、预测、探究），随存档保存在 _learn 里
   /* 每个实验最多保存的记录条数（与 server.py 的 LAB_ROW_LIMIT 一致） */
   limit:p=>({bm:1500})[p]||500,
   live:{},
@@ -105,23 +106,25 @@ const LabStore = {
   restore(p,s){
     this.live[p]=s;
     const saved=this.data[p];
+    if(saved && saved._learn && typeof saved._learn==='object') this.extra[p]=JSON.parse(JSON.stringify(saved._learn));
     if(saved && Array.isArray(saved.rows) && saved.rows.length<=this.limit(p)){
       const keys=Object.keys(s);
       if(keys.every(k=>k in saved && (typeof s[k]!=='number' || Number.isFinite(saved[k])))) {
         const copy=JSON.parse(JSON.stringify(saved));      // 复制一份：之后修改 s 不会改到“已保存”的记录
         for(const k of keys) s[k]=copy[k];
         s.review=typeof saved.review==='string'?saved.review:'';
-        this.sent[p]=JSON.stringify(s);
+        this.sent[p]=JSON.stringify(this.withExtra(p,s));
         return saved;
       }
     }
-    this.sent[p]=JSON.stringify(s);   // 没有存档：初始状态不必立刻保存，有了变化再存
+    this.sent[p]=JSON.stringify(this.withExtra(p,s));   // 没有存档：初始状态不必立刻保存，有了变化再存
   },
+  withExtra(p,s){ const e=this.extra[p]; return e&&Object.keys(e).length?{...s,_learn:e}:s; },
   save(p,s){
     this.live[p]=s; $('#'+p+'-save-status')?.classList.remove('warn-text');
     if(!AI.backend || this.failed) return;
     if(s.rows.length>this.limit(p)){ $('#'+p+'-save-status').textContent=`记录已超过上限 ${this.limit(p)} 条，超出的部分无法保存，请撤销或删除一部分数据`; return; }
-    const json=JSON.stringify(s); if(json===this.sent[p]) return;   // 内容没变，不发请求
+    const json=JSON.stringify(this.withExtra(p,s)); if(json===this.sent[p]) return;   // 内容没变，不发请求
     this.sent[p]=json; const state=JSON.parse(json); this.data[p]=state;
     this.queue=this.queue.then(async()=>{
       // keepalive 让关窗时的最后一次保存也能发出；Chrome 限制未读完的 keepalive 响应共 64 KB，所以每次都要读完响应
@@ -307,6 +310,7 @@ function drawStrip(c, value, {px=8, major=10, label=k=>k}={}){
 async function runReview(p, {check, prompt, offline}){
   const box=$('#'+p+'-review'), btn=$('#'+p+'-check');
   if(btn.disabled) return false;
+  const g=typeof Learn!=='undefined'?Learn.gate(p):''; if(g){ box.innerHTML=`<div class="note">${esc(g)}</div>`; return false; }
   const msg=check(); if(msg){ box.innerHTML=`<div class="note">${esc(msg)}</div>`; return false; }
   const locked=['check','rec','undo','clr'].map(k=>$('#'+p+'-'+k));
   locked.forEach(b=>b.disabled=true);
@@ -386,8 +390,10 @@ const Report = (() => {
     sections.push({h:'三、实验数据', blocks:data.length?data:[{p:[{t:'还没有记录数据。'}]}]});
     const res=blocks(document.getElementById(P+'-result'));
     sections.push({h:'四、数据处理与结果', blocks:(res.length?res:[{p:[{t:'还没有足够的数据进行计算。'}]}]).concat(vi?[vi]:[])});
+    const lb=typeof Learn!=='undefined'?Learn.reportBlocks(P):[];
+    if (lb.length) sections.push({h:'五、自主计算与探究', blocks:lb});
     const rv=[...document.getElementById(P+'-review').querySelectorAll('p')].map(p=>{ const t=p.textContent.trim(), m=t.match(/^【[^】]+】/); return {p:m?[{t:m[0],b:true},{t:t.slice(m[0].length)}]:[{t}]}; }).filter(b=>b.p.some(x=>x.t));
-    sections.push({h:'五、AI 助教评语', blocks:rv.length?rv:[{p:[{t:'尚未进行 AI 批改。'}]}]});
+    sections.push({h:(lb.length?'六':'五')+'、AI 助教评语', blocks:rv.length?rv:[{p:[{t:'尚未进行 AI 批改。'}]}]});
     const who={}; box?.querySelectorAll('[data-rep]').forEach(i=>{ who[i.dataset.rep]=i.value.trim(); });
     const d=new Date(), pad=v=>String(v).padStart(2,'0');
     return {title, source:box?.dataset.source||'virtual', version:APP_VERSION, date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`, student:who, sections};
@@ -395,6 +401,7 @@ const Report = (() => {
   async function exportReport(P, fmt, card){
     const st=card.querySelector('.rep-status'), btns=card.querySelectorAll('[data-report]');
     if (card.dataset.busy) return;                                   // 生成期间不重复导出
+    const g=typeof Learn!=='undefined'?Learn.gate(P):''; if (g){ card.querySelector('.rep-status').textContent=g; return; }
     card.dataset.busy=1; btns.forEach(b=>{ b.disabled=true; }); st.textContent='正在生成报告…';
     const rep=collect(P);
     saveWho(rep.student);

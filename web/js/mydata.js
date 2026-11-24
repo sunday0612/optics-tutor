@@ -92,11 +92,11 @@ const MyData = (() => {
     groups: [
       {id: 'he', name: '测波长', desc: '每数过一定环数（如 50 环）记一次鼓轮读数。N 填从第一次记录起累计的环数，第一行 N = 0。',
         params: [{k: 'inst', label: '鼓轮仪器误差限', unit: 'mm', def: '0.0001'}, {k: 'ref', label: '参考波长（可不填）', unit: 'nm', def: '632.8', opt: true}],
-        cols: [{k: 'N', label: '累计环数 N'}, {k: 'd', label: '读数 d / mm'}],
+        cols: [{k: 'N', label: '累计环数 N'}, {k: 'd', label: '读数 d / mm', dec: 5, res: '鼓轮最小分度 0.0001 mm，估读到 0.00001 mm'}],
         example: () => [...Array(10)].map((_, i) => [String(i * 50), (32.41256 + i * 50 * 632.8e-6 / 2 + nz(i, 6e-5)).toFixed(5)])},
       {id: 'na', name: '钠光双线（选做）', desc: '换钠灯后，每到条纹最模糊（视见度最低）时记一次读数，连续记 6 次以上，中间不要漏记。',
         params: [{k: 'lam', label: '平均波长 λ̄', unit: 'nm', def: '589.3'}, {k: 'inst', label: '鼓轮仪器误差限', unit: 'mm', def: '0.0001'}, {k: 'ref', label: '参考 Δλ（可不填）', unit: 'nm', def: '0.597', opt: true}],
-        cols: [{k: 'd', label: '最低时读数 d / mm'}],
+        cols: [{k: 'd', label: '最低时读数 d / mm', dec: 5, res: '鼓轮最小分度 0.0001 mm，估读到 0.00001 mm'}],
         example: () => [...Array(6)].map((_, i) => [(31.0532 + i * 0.29085 + nz(i + 3, 0.006)).toFixed(5)])}],
     process(D){
       const out = {table: '', result: '', issues: [], ai: [], ok: false};
@@ -153,11 +153,11 @@ const MyData = (() => {
     groups: [
       {id: 'ring', name: '牛顿环', desc: '每一行填一个环：级次 k，叉丝在左侧、右侧与该暗环相切时的读数。级次要真实（从中心数起），逐差时按级次从小到大配对。',
         params: [{k: 'lam', label: '光源波长 λ', unit: 'nm', def: '589.3'}, {k: 'inst', label: '读数显微镜仪器误差限', unit: 'mm', def: '0.005'}, {k: 'ref', label: '参考 R（可不填）', unit: 'm', def: '', opt: true}],
-        cols: [{k: 'k', label: '级次 k'}, {k: 'L', label: '左侧读数 / mm'}, {k: 'R', label: '右侧读数 / mm'}],
+        cols: [{k: 'k', label: '级次 k'}, {k: 'L', label: '左侧读数 / mm', dec: 3, res: '读数显微镜分度 0.01 mm，估读到 0.001 mm'}, {k: 'R', label: '右侧读数 / mm', dec: 3, res: '读数显微镜分度 0.01 mm，估读到 0.001 mm'}],
         example: () => [30, 29, 28, 27, 26, 25, 24, 23, 22, 21].map((k, i) => { const h = Math.sqrt((k - 0.3) * 1.05e3 * 589.3e-6); return [String(k), (25.012 - h + nz(i, 0.004)).toFixed(3), (25.012 + h + nz(i + 7, 0.004)).toFixed(3)]; })},
       {id: 'wedge', name: '劈尖（选做）', desc: '从棱边附近开始，每隔相同条数（如 10 条）暗纹记一次位置；再在参数里填棱边和细丝的位置。',
         params: [{k: 'lam', label: '光源波长 λ', unit: 'nm', def: '589.3'}, {k: 'inst', label: '仪器误差限', unit: 'mm', def: '0.005'}, {k: 'xe', label: '棱边位置', unit: 'mm', def: ''}, {k: 'xw', label: '细丝位置', unit: 'mm', def: ''}],
-        cols: [{k: 'N', label: '暗纹序号 N'}, {k: 'x', label: '位置 x / mm'}],
+        cols: [{k: 'N', label: '暗纹序号 N'}, {k: 'x', label: '位置 x / mm', dec: 3, res: '读数显微镜分度 0.01 mm，估读到 0.001 mm'}],
         example: () => [...Array(8)].map((_, i) => [String(i * 10), (6.204 + i * 10 * 0.1652 + nz(i, 0.003)).toFixed(3)]), exParams: {xe: '5.318', xw: '38.976'}}],
     process(D){
       const out = {table: '', result: '', issues: [], ai: [], ok: false};
@@ -523,7 +523,7 @@ const MyData = (() => {
     groups: [
       {id: 'scan', name: '刀口扫描数据', desc: '每一行一个点：导轨位置 z、刀口位置 x、透过功率 P。同一 z 的点会自动分成一组拟合，每组至少 6 个点，并覆盖透过率 10%～90%。',
         params: [{k: 'lam', label: '波长 λ', unit: 'nm', def: '632.8'}, {k: 'inst', label: '刀口千分尺仪器误差限', unit: 'mm', def: '0.005'}],
-        cols: [{k: 'z', label: '位置 z / mm'}, {k: 'x', label: '刀口 x / mm'}, {k: 'P', label: '功率 P'}],
+        cols: [{k: 'z', label: '位置 z / mm'}, {k: 'x', label: '刀口 x / mm', dec: 3, res: '千分尺分度 0.01 mm，估读到 0.001 mm'}, {k: 'P', label: '功率 P'}],
         example: () => { const W0 = 0.13, z0 = 600, zR = Math.PI * W0 * W0 / (1.15 * 632.8e-6), out = []; [400, 480, 540, 600, 660, 720, 800].forEach((z, k) => { const w = W0 * Math.sqrt(1 + ((z - z0) / zR) ** 2); for (let i = 0; i < 12; i++){ const x = 4 - 2 * w + i * 4 * w / 11; out.push([String(z), x.toFixed(3), (1.2 * 0.5 * erfc(Math.SQRT2 * (x - 4) / w) * (1 + nz(i + k * 13, 0.006)) + 0.0004).toFixed(4)]); } }); return out; }},
       {id: 'w', name: '直接输入光斑半径', desc: '已经得到各位置光斑半径（1/e² 半径）时使用。',
         params: [{k: 'lam', label: '波长 λ', unit: 'nm', def: '632.8'}],
@@ -578,15 +578,15 @@ const MyData = (() => {
     groups: [
       {id: 'uv', name: '物距像距法', desc: '每一行：物、透镜、像屏的导轨读数（像最清晰时）。',
         params: [{k: 'inst', label: '导轨仪器误差限', unit: 'mm', def: '0.5'}],
-        cols: [{k: 'xo', label: '物 / mm'}, {k: 'xl', label: '透镜 / mm'}, {k: 'xi', label: '像屏 / mm'}],
-        example: () => [[100, 400], [100, 450], [100, 500], [100, 550]].map(([xo, xl], i) => { const u = xl - xo, v = u * 165 / (u - 165); return [String(xo), String(xl), (xl + v + nz(i, 2)).toFixed(1)]; })},
+        cols: [{k: 'xo', label: '物 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}, {k: 'xl', label: '透镜 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}, {k: 'xi', label: '像屏 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}],
+        example: () => [[100, 400], [100, 450], [100, 500], [100, 550]].map(([xo, xl], i) => { const u = xl - xo, v = u * 165 / (u - 165); return [xo.toFixed(1), xl.toFixed(1), (xl + v + nz(i, 2)).toFixed(1)]; })},
       {id: 'bessel', name: '二次成像法', desc: '每一行：物和屏的读数，以及成大像、小像时透镜的读数。可以换几个 D 测量。',
         params: [{k: 'inst', label: '导轨仪器误差限', unit: 'mm', def: '0.5'}],
-        cols: [{k: 'xo', label: '物 / mm'}, {k: 'xs', label: '屏 / mm'}, {k: 'x1', label: '大像时透镜 / mm'}, {k: 'x2', label: '小像时透镜 / mm'}],
-        example: () => [800, 850, 900, 950].map((xs, i) => { const Dd = xs - 100, d = Math.sqrt(Dd * Dd - 4 * Dd * 165); return ['100', String(xs), (100 + (Dd - d) / 2 + nz(i, 1.2)).toFixed(1), (100 + (Dd + d) / 2 + nz(i + 3, 1.2)).toFixed(1)]; })},
+        cols: [{k: 'xo', label: '物 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}, {k: 'xs', label: '屏 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}, {k: 'x1', label: '大像时透镜 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}, {k: 'x2', label: '小像时透镜 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}],
+        example: () => [800, 850, 900, 950].map((xs, i) => { const Dd = xs - 100, d = Math.sqrt(Dd * Dd - 4 * Dd * 165); return ['100.0', xs.toFixed(1), (100 + (Dd - d) / 2 + nz(i, 1.2)).toFixed(1), (100 + (Dd + d) / 2 + nz(i + 3, 1.2)).toFixed(1)]; })},
       {id: 'auto', name: '自准法', desc: '物屏上出现清晰倒像时记透镜读数；“正向”“反向”指透镜转 180° 前后。每个方向建议测 3 次。',
         params: [{k: 'xo', label: '物的位置', unit: 'mm', def: '100'}, {k: 'inst', label: '导轨仪器误差限', unit: 'mm', def: '0.5'}],
-        cols: [{k: 'dir', label: '方向', kind: 'sel', opts: [['正向', '正向'], ['反向', '反向']]}, {k: 'x', label: '透镜 / mm'}],
+        cols: [{k: 'dir', label: '方向', kind: 'sel', opts: [['正向', '正向'], ['反向', '反向']]}, {k: 'x', label: '透镜 / mm', dec: 1, res: '导轨刻度 1 mm，估读到 0.1 mm'}],
         example: () => [['正向', 263.2], ['正向', 262.6], ['正向', 263.5], ['反向', 267.1], ['反向', 266.4], ['反向', 266.9]].map(r => r.map(String))}],
     process(D){
       const out = {table: '', result: '', issues: [], ai: [], ok: false};
@@ -649,7 +649,7 @@ const MyData = (() => {
       {id: 'pupil', name: '出瞳法', desc: '每一行一次测量：出瞳（光斑最小、边缘最清晰处）的直径 D′，以及白屏到目镜的距离（可不填）。',
         params: [{k: 'D', label: '物镜通光口径 D', unit: 'mm', def: '30.00'}, {k: 'uD', label: '卡尺仪器误差限', unit: 'mm', def: '0.02'}, {k: 'ud', label: '光斑直径估读误差限', unit: 'mm', def: '0.05'},
           {k: 'L', label: '标尺（或调焦）距离 L', unit: 'mm', def: '5000', opt: true}, {k: 'fo', label: '物镜标称焦距', unit: 'mm', def: '300', opt: true}],
-        cols: [{k: 'd', label: '出瞳直径 D′ / mm'}, {k: 'z', label: '白屏到目镜 / mm', opt: true}],
+        cols: [{k: 'd', label: '出瞳直径 D′ / mm', dec: 2, res: '方格或读数显微镜估读到 0.01 mm'}, {k: 'z', label: '白屏到目镜 / mm', opt: true}],
         example: () => [2.35, 2.40, 2.35].map((d, i) => [d.toFixed(2), (27.5 + nz(i, 0.6)).toFixed(1)])},
       {id: 'field', name: '视场', desc: '每一行一次读数：视场两侧边缘对应的标尺读数（较小的 x₁、较大的 x₂，单位 mm）。',
         params: [{k: 'L', label: '标尺到物镜的距离 L', unit: 'mm', def: '5000'}, {k: 'est', label: '边缘估读误差限', unit: 'mm', def: '1'}],
@@ -746,6 +746,17 @@ const MyData = (() => {
   function compute(spec, s){
     const cache = {}, D = gid => cache[gid] || (cache[gid] = parse(spec, s, gid));
     let res; try { res = spec.process(D); } catch(e){ res = {table: '', result: `<div class="note">计算出错：${esc(e.message)}</div>`, issues: [], ai: [], ok: false}; }
+    /* 读数的位数与仪器分度是否相符（只检查录入的原始字符串，末尾的 0 也算一位） */
+    spec.groups.forEach(g => g.cols.forEach((c, j) => {
+      const rows = rowsOf(s, g.id), few = [], many = [], odd = [];
+      rows.forEach((r, i) => { const t = String(r.v[j] ?? '').trim(); if (!t) return;
+        if (c.dec != null && num(t) != null){ const d = (t.split('.')[1] || '').replace(/[eE].*/, '').length; if (d < c.dec) few.push(i + 1); else if (d > c.dec) many.push(i + 1); }
+        if (c.kind === 'ang' && /[°度]\s*\d+\.\d|^\s*\d+\s+\d+\.\d/.test(t)) odd.push(i + 1); });
+      const name = c.label.replace(/<[^>]+>/g, '').replace(/\s*\/.*$/, '');
+      if (few.length) res.issues.push(`读数位数：“${g.name}”的${name}第 ${few.join('、')} 行少了估读位（${c.res}，应记到小数点后 ${c.dec} 位，末位是 0 也要写出）`);
+      if (many.length) res.issues.push(`读数位数：“${g.name}”的${name}第 ${many.join('、')} 行记到了小数点后 ${c.dec} 位以后，超出了仪器能读出的位数（${c.res}）`);
+      if (odd.length) res.issues.push(`读数位数：“${g.name}”的${name}第 ${odd.join('、')} 行的“分”带了小数；游标最小读数 1′，应读到整数分`);
+    }));
     if (/NaN|Infinity/.test(res.result)){ res.ok = false; res.issues.push('有的结果无法计算（出现了非有限值），多半是参数为 0 或数据重复，请检查'); }
     spec.groups.forEach(g => { const d = D(g.id);
       if (d.bad.length) res.issues.unshift(`${g.name}：第 ${d.bad.join('、')} 行有空白或不合法的数据，没有参与计算`);

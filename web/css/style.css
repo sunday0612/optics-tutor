@@ -343,3 +343,44 @@ details.rawdata{margin-top:16px;border-top:1px solid var(--hair-2);padding-top:1
 details.rawdata summary{cursor:pointer;font-size:13.5px;color:var(--muted)}
 details.rawdata summary:hover{color:var(--ink)}
 details.rawdata[open] summary{margin-bottom:4px}
+
+/* ---------- 我先算 ---------- */
+.sc-hidden [id$="-result"]>:not(.note):not(.empty){display:none}
+.selfcalc:empty{display:none}
+.selfcalc{margin-top:14px;padding:12px 14px;border:1px solid var(--coat);border-radius:8px;background:#fbfaff;font-size:13.5px}
+.sc-head{color:#33373D;line-height:1.6}
+.sc-head b{color:var(--coat);font-family:var(--serif);font-size:15px}
+.sc-q{margin-top:10px;padding-top:10px;border-top:1px solid var(--hair-2)}
+.sc-q.passed .sc-t{color:var(--muted)}
+.sc-t{font-weight:600;color:var(--ink)}
+.sc-ok{margin-left:8px;color:#2f7a4a;font-weight:500;font-size:12.5px}
+.sc-n{margin-left:8px;color:var(--faint);font-weight:400;font-size:12px}
+.sc-fields{display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:8px}
+.scf{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.scf.wide{flex-direction:row;align-items:center;gap:4px;flex-basis:100%;color:var(--ink);font-size:13.5px}
+.scf input{width:72px;font:inherit;font-size:13.5px;font-variant-numeric:tabular-nums;border:1px solid var(--hair);border-radius:5px;padding:4px 7px;background:#fff;color:var(--ink)}
+.scf.wide input{width:96px}
+.scf.ok input{border-color:#5aa874;background:#f1f8f3}
+.scf.bad input{border-color:var(--bad);background:var(--bad-soft)}
+.sc-hint{margin:6px 0 0;padding-left:18px;color:var(--bad);font-size:12.5px;line-height:1.7}
+.sc-foot{margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sc-foot .hint{margin:0}
+.sc-rule{margin-top:8px;font-size:12px}
+
+/* ---------- 先预测、再观察 ---------- */
+.poe{margin:12px 0 4px;padding:12px 14px;border-radius:8px;background:#fff8ea;border:1px solid #e9c77a;font-size:13.5px;line-height:1.7}
+.poe p{margin:4px 0}
+.poe-h{font-weight:600;color:#7a5413}
+.poe-o{display:flex;flex-direction:column;gap:6px;margin:8px 0 4px}
+.poe-o button{text-align:left;background:#fff}
+.poe.done{background:none;border-color:var(--hair-2);padding:8px 12px}
+.poe.done summary{cursor:pointer;color:var(--muted);font-size:13px}
+.poe.flash{animation:poeflash .9s ease 2}
+@keyframes poeflash{50%{box-shadow:0 0 0 3px rgba(233,199,122,.8)}}
+@media (prefers-reduced-motion:reduce){.poe.flash{animation:none;outline:2px solid #e9c77a}}
+
+/* ---------- 探究任务 ---------- */
+.inquiry .inq-t{font-size:13.5px;line-height:1.75;color:#33373D}
+.inquiry .inq-ok{margin-top:8px;color:#2f7a4a;font-weight:600;font-size:13.5px}
+.inquiry .inq-r{margin-top:8px;padding:8px 12px;background:var(--coat-soft);border-radius:6px;font-size:13.5px;line-height:1.75}
+.inquiry input{font:inherit;font-size:13.5px;border:1px solid var(--hair);border-radius:5px;padding:4px 8px;background:#fff}

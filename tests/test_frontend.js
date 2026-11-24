@@ -270,6 +270,13 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    vm.runInContext(`LN.s.mode='bessel'; LN.s.xs=900; LN.s.xl=LN.sharpPos()[0];`,labs);
    const ends=vm.runInContext(`LN.trace().filter(r=>r.kind==='fwd').map(r=>r.pts[2][1])`,labs);
    assert(Math.max(...ends.map(Math.abs))<1e-6, 'sharp Bessel position focuses on the screen'); }
+ // ---------- v1.10.0：教学设置（t 因子、扩展不确定度、取位）与读数位数检查 ----------
+ { const U=vm.runInContext('Unc',labs);
+   assert.equal(U.format(632.84,0.664,'').text,'(632.8 ± 0.7)');            // 默认：1 位，只进不舍
+   assert.equal(U.format(632.84,0.164,'').text,'(632.84 ± 0.17)');          // 首位是 1：保留 2 位
+   U.config({tA:'t68'}); assert(Math.abs(U.typeA([1,2,3])/ (Math.sqrt(1/3)) - 1.321)<1e-9);
+   U.config({k:2, sig:'2', round:'half'}); assert.equal(U.format(632.84,0.664,'').text,'(632.84 ± 1.33)'.replace('632.84 ± 1.33','632.8 ± 1.3'));
+   U.config({tA:'none', k:1, sig:'auto', round:'up'}); }
  // ---------- v1.8.0：处理我的数据 ----------
  Object.assign(labs,{esc:s=>String(s),dms:d=>{d=((d%360)+360)%360;let a=Math.floor(d),m=Math.round((d-a)*60);if(m===60){a=(a+1)%360;m=0;}return `${a}°${String(m).padStart(2,'0')}′`;}});
  vm.runInContext(fs.readFileSync('web/js/mydata.js','utf8'),labs);
@@ -302,6 +309,8 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    const pv=MD.provenance(spec,s); assert.equal(pv.source,'mixed'); assert.deepEqual([...pv.where[0].no],[1,2,3,4,5,6,7,8,9,10]);
    s.rows[0].x[0]=0; assert.deepEqual([...MD.provenance(spec,s).where[0].no],[2,3,4,5,6,7,8,9,10]);
    s.rows.forEach(r=>r.x=r.v.map(()=>0)); assert.equal(MD.provenance(spec,s).source,'real'); }
+ { const spec=MD.SPECS.newton, s=MD.blank(spec); spec.groups[0].example().forEach((v,i)=>{ if(i===1) v[1]='24.91'; if(i===2) v[2]='25.1234'; s.rows.push({g:'ring',v}); });
+   const is=MD.compute(spec,s).issues.filter(x=>x.startsWith('读数位数')); assert(is.length===2 && /第 2 行少了估读位/.test(is[0]) && /第 3 行记到了/.test(is[1]), is.join(';')); }
  // 位置太集中的光束数据不能给出可信的 M²
  { const h=MD.hyperFit([115,120,125,130,135],[0.4321,0.4330,0.4336,0.4347,0.4352],632.8e-6); assert(h.invalid || !h.reliable); }
  console.log('Frontend regression checks passed (Newton invalid data, uncertainty, self-count, unknown spectral line, fiber bend loss, Malus law and wave plates, laser diode and photodiode, Na doublet, Newton dust and wedge, vernier reading, knife-edge beam and M² with reliability checks, lens focal length, real-data processing for all nine experiments, telescope finite-distance corrections, lens ray tracing).');

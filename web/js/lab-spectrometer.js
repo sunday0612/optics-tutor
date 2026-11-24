@@ -344,5 +344,11 @@ ${X.adj?`仪器调节：目镜、望远镜调焦、各半调节、平行光管�
       offline:()=>offline(c)
     }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'度盘偏心差', label:'φ左 − φ̄', unit:'′',
+    text:'度盘的转轴与刻度中心不重合时，两个游标的读数有大小相反的误差。<b>用你的数据</b>：每次测量只用左游标算 φ左 = |θ₁ − θ₁′|/2，再和两个游标的平均 φ̄ 相比，算出各次 φ左 − φ̄ 的平均值（单位：角分）。',
+    ready:()=>pairs().length>0, need:'先完成至少一次 +1、−1 级的测量。', hint:'φ左 = |θ₁ − θ₁′|/2，φ右 = |θ₂ − θ₂′|/2，φ̄ = (φ左 + φ右)/2；结果乘 60 换成角分。',
+    answer:()=>Unc.mean(pairs().map(([a,b])=>{ const l=angDiff(a.L,b.L)/2, r=angDiff(a.R,b.R)/2; return (l-(l+r)/2)*60; })), tol:()=>0.3,
+    reveal:()=>`这台分光计的度盘偏心约 ${(s.e*60).toFixed(1)}′：只读一个游标，φ 可能偏差这么多，相当于光栅常数偏差约 ${(s.e*Math.PI/180/Math.tan(19.1*Math.PI/180)*100).toFixed(2)}%。两个游标相差 180°，偏心误差大小相等、符号相反，取平均就消掉了。`});
+  function pairs(){ const g={}; s.rows.filter(r=>!r.x).forEach(r=>{ (g[r.n]=g[r.n]||{})[r.k]=r; }); return Object.values(g).filter(p=>p[1]&&p[-1]).map(p=>[p[1],p[-1]]); }
   return {mount, render, key};
 })();

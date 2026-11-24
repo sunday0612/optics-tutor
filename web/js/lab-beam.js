@@ -276,5 +276,10 @@ ${[['直接测量',c.D],['透镜后',c.L]].map(([n,h])=>h&&!h.invalid?`${n}二�
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
   (globalThis.LabMath||(globalThis.LabMath={})).beam={erfFit:fitOnce};   // “处理我的数据”复用刀口拟合
+  typeof Learn!=='undefined' && Learn.task(P,{title:'90%–10% 宽度与光斑半径', label:'平均比值', unit:'',
+    text:'粗测时常用透过率 90% 与 10% 两点的距离来代替光斑半径。<b>用你的数据</b>：对每个位置算出 (x₁₀ − x₉₀)/w（w 是误差函数拟合的 1/e² 半径），求平均。',
+    ready:()=>calc().gs.some(g=>g.fit), need:'先完成至少一个位置的刀口扫描。', hint:'表中“w（90%–10%）”一列除以拟合的 w。',
+    answer:()=>Unc.mean(calc().gs.filter(g=>g.fit).map(g=>g.fit.w1090/g.fit.w)), tol:()=>0.01,
+    reveal:()=>'理论上，对高斯光束 erfc 曲线 90% 和 10% 两点相距 1.2816w（√2 × 0.9062）。所以 w ≈ (x₁₀ − x₉₀)/1.28；但只用两个点受读数和功率起伏影响大，拟合整条曲线更可靠。光束偏离高斯分布时，这个比值也会偏离 1.28，可以用来检查光束质量。'});
   return {mount, render, key};
 })();

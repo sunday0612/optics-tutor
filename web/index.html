@@ -141,6 +141,21 @@
       <div class="row"><button class="primary" id="saveKey">保存并测试</button><span class="kstatus" id="keyStatus"></span></div>
     </section>
     <section class="sheet-sec">
+      <h3>教学设置</h3>
+      <p>按本校实验教材的约定设置，所有实验的不确定度计算和“我先算”的核对都按这里来。</p>
+      <label class="field"><span>我先算</span>
+        <select id="prefCalc"><option value="try">先自己算，可以跳过（默认）</option><option value="must">必须先自己算对，才显示结果、AI 检查和导出报告</option><option value="show">不使用，直接显示程序结果</option></select></label>
+      <label class="field"><span>A 类不确定度</span>
+        <select id="prefTA"><option value="none">u_A = s/√n（平均值的标准偏差）</option><option value="t68">u_A = t₀.₆₈₃·s/√n（测量次数少时乘 t 因子）</option></select></label>
+      <label class="field"><span>结果的不确定度</span>
+        <select id="prefK"><option value="1">合成标准不确定度 u</option><option value="2">扩展不确定度 U = 2u（k = 2）</option></select></label>
+      <label class="field"><span>不确定度保留</span>
+        <select id="prefSig"><option value="auto">1 位有效数字，首位是 1 或 2 时保留 2 位</option><option value="1">1 位有效数字</option><option value="2">2 位有效数字</option></select></label>
+      <label class="field"><span>取位方式</span>
+        <select id="prefRound"><option value="up">只进不舍</option><option value="half">四舍五入</option></select></label>
+      <div class="row"><button class="primary" id="savePrefs">保存教学设置</button><span class="kstatus" id="prefStatus"></span></div>
+    </section>
+    <section class="sheet-sec">
       <h3>使用数据</h3>
       <p>每次提问、答题、实验记录和 AI 批改都会记在本机，可用来统计作品的应用成效。</p>
       <dl class="usage" id="usage"></dl>
@@ -156,6 +171,7 @@
 <!-- 按顺序加载：公共工具 → 现象仿真 → 九个虚拟实验 → 设置 → 页面路由 -->
 <script src="js/core.js"></script>
 <script src="js/uncertainty.js"></script>
+<script src="js/learn.js"></script>
 <script src="js/mini3d.js"></script>
 <script src="js/models3d.js"></script>
 <script src="js/sim.js"></script>

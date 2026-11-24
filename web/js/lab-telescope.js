@@ -291,5 +291,10 @@ ${['A','B'].filter(ep=>c[ep]).map(ep=>{ const o=c[ep]; return `目镜 ${ep}：${
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'由放大率反推物镜焦距', label:'f₀', unit:'mm',
+    text:'标尺在有限远处时，调焦后镜筒变长，出瞳法测得的 Γ瞳 = s′/fₑ。<b>用你的数据</b>：取目镜标称焦距 fₑ，由 Γ瞳 的平均值算出 s′ = Γ瞳·fₑ，再由 1/f₀ = 1/L + 1/s′ 反推物镜焦距 f₀（L = 5000 mm）。',
+    ready:()=>{ const c=calc(); return !!(c.A?.pup||c.B?.pup); }, need:'先用出瞳法测至少一次放大率。', hint:'f₀ = L·s′/(L + s′)，用你测出瞳时那个目镜的标称焦距。',
+    answer:()=>{ const c=calc(), o=c.A?.pup?c.A:c.B, sp_=o.pup.sum.mean*o.nom; return L*sp_/(L+sp_); }, tol:a=>a*0.004,
+    reveal:()=>`物镜实际焦距 ${s.fo.toFixed(1)} mm（标称 ${FO} mm），目镜 A、B 实际为 ${s.feA.toFixed(2)}、${s.feB.toFixed(2)} mm。反推结果与真实值的差，主要来自目镜标称焦距的公差——标称值不等于真实值，这也是一种系统误差。`});
   return {mount, render, key};
 })();

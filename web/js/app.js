@@ -36,10 +36,13 @@ window.addEventListener('resize', ()=>{ clearTimeout(resizeTimer); resizeTimer=s
 
 /* 启动 */
 async function start(){
-await LabStore.ready;
+await Promise.all([LabStore.ready, Learn.ready]);
 if(LabStore.failed) return;
 for (const k in LABS) LABS[k].mount($('#labbox-'+k));
 for (const k of MyData.KEYS) MyData.mount(k, $('#databox-'+k));
+/* 我先算、先预测、探究任务 */
+for (const k in LABS) Learn.attach($('#labbox-'+k).querySelector('[id$="-steps"]').id.slice(0,-6));
+for (const k of MyData.KEYS) Learn.attach(MyData.SPECS[k].P, {virtual:false});
 buildTabs(); buildControls(); renderStats();
 $('#explain').innerHTML = `<p>${esc(PRINCIPLE.double)}</p><p style="color:var(--muted)">在上面输入问题或点一个示例，右边的图样、数值和下面的小测会一起更新；也可以直接拖动滑块做“虚拟实验”。</p>`;
 showQuiz(QUIZ.double);

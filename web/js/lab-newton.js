@@ -390,5 +390,11 @@ ${c.validCount?'请顺带解释为什么单环直接算 R 会有偏差而逐差�
       offline:()=>offline(c, wc)
     }).then(ok=>{ if(ok){ s.checked=true; s.review=ok; table(); render(); } });
   }
+  typeof Learn!=='undefined' && Learn.task(P,{title:'接触点的灰尘', label:'附加级次 k₀', unit:'',
+    text:'平凸透镜和平板接触处如果有灰尘或形变，所有暗环的级次会整体偏移 k₀：D<sub>k</sub>² = 4Rλ(k − k₀)。<b>用你的数据</b>：对 D<sub>k</sub>² 和 k 作直线拟合，截距 b₀、斜率 b₁，算出 k₀ = −b₀/b₁。',
+    ready:()=>{ const D=calc().D; return Object.keys(D).length>=4; }, need:'先测完至少 4 个环的直径。', hint:'用 10 个环的 (k, D²) 做最小二乘直线拟合；k₀ 一般在 0～1 之间。',
+    answer:()=>{ const D=calc().D, ks=Object.keys(D).map(Number), ys=ks.map(k=>D[k]**2), n=ks.length, mx=Unc.mean(ks), my=Unc.mean(ys), b=ks.reduce((q,k,i)=>q+(k-mx)*(ys[i]-my),0)/ks.reduce((q,k)=>q+(k-mx)**2,0); return -(my-b*mx)/b; },
+    tol:()=>0.05,
+    reveal:()=>`这次接触处的附加级次 k₀ = ${NX.f.toFixed(2)}。如果直接用 R = D<sub>k</sub>²/(4kλ)，第 25 级会偏小约 ${(NX.f/25*100).toFixed(1)}%；逐差法用 D<sub>m</sub>² − D<sub>n</sub>²，k₀ 正好相减消去，这就是牛顿环要用逐差法的原因。`});
   return {mount, render, key};
 })();

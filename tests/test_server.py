@@ -93,6 +93,11 @@ class API(unittest.TestCase):
   self.assertEqual(self.req('/api/labs')[1]['umi'],state)
   import report
   self.assertIn('实测',report.footer({'source':'real','version':'x'})); self.assertIn('虚拟实验',report.footer({'version':'x'}))
+ def test_teaching_prefs(self):
+  self.assertEqual(self.req('/api/prefs')[1],{'calc':'try','tA':'none','k':1,'sig':'auto','round':'up'})
+  self.assertEqual(self.req('/api/prefs',{'tA':'t68','k':2})[1]['prefs']['k'],2)
+  self.assertEqual(self.req('/api/prefs')[1]['tA'],'t68')
+  self.assertEqual(self.req('/api/prefs',{'calc':'maybe'})[0],400)
  def test_stats_corrupt_line(self):
   Path(server.LOG_FILE).write_text('bad json\n{"type":"quiz","data":[],"time":"today"}\n',encoding='utf-8')
   self.assertEqual(self.req('/api/stats')[0],200)
