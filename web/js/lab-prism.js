@@ -79,6 +79,7 @@ const PM = (() => {
           <canvas id="${P}-dial" class="strip"></canvas>
           <div class="seg" id="${P}-tgt"><button class="tab" data-t="tel">转望远镜</button><button class="tab" data-t="stage">转载物台</button></div>
           ${turnControls(P,[[1/30,'微调'],[0.5,'中速'],[6,'快速']],{assist:'显示谱线名称',left:'◀ 左转',rightLabel:'右转 ▶'})}
+          <label class="ctl-inline" style="margin-top:6px"><input type="checkbox" id="${P}-adv"> 进阶：少提示（不提示转折点和对准情况，不标谱线名称，转折点自己判断）</label>
           <div class="tip">按住按钮转动，也可以拖动刻度条（转望远镜）；键盘 ← → 每次 1′（Shift 为 10′），转的是上面选中的部件。</div>
         </div>
       </div>`});
@@ -93,6 +94,7 @@ const PM = (() => {
     $('#'+P+'-onoff').onclick=()=>{ s.on=!s.on; save(); render(); };
     $('#'+P+'-tgt').onclick=e=>{ const b=e.target.closest('button'); if (b){ tgt=b.dataset.t; render(); } };
     $('#'+P+'-assist').onchange=render;
+    const adv=$('#'+P+'-adv'); adv.checked=!!s.adv; adv.onchange=()=>{ s.adv=adv.checked; save(); render(); };
     bindHold($('#'+P+'-panel'), $('#'+P+'-speed'), d=>{ turn(d); render(); });
     bindDrag($('#'+P+'-dial'), 6, d=>{ const t=tgt; tgt='tel'; turn(d/60); tgt=t; render(); });
     $('#'+P+'-rec').onclick=record;
@@ -107,7 +109,7 @@ const PM = (() => {
     if (tgt==='stage'){
       const before=trace(GREEN); s.rho+=d; const after=trace(GREEN);
       if (s.on && s.view==='spec' && before && after){ const ch=Math.abs(after.dev)-Math.abs(before.dev);
-        if (dir<0 && ch>0){ flash='绿线停下并开始反向：刚才的转折点就是最小偏向位置。退回转折点，再用望远镜对准绿线记录。'; flashT=Date.now(); }
+        if (dir<0 && ch>0 && !s.adv){ flash='绿线停下并开始反向：刚才的转折点就是最小偏向位置。退回转折点，再用望远镜对准绿线记录。'; flashT=Date.now(); }
         if (Math.abs(ch)>1e-7) dir=Math.sign(ch); }
     } else {
       const T0=s.T; s.T+=d;
@@ -124,14 +126,14 @@ const PM = (() => {
     $('#'+P+'-readout').innerHTML=`<div>刻度盘读数（望远镜）</div><div class="v">左游标 ${dms(left())}　右游标 ${dms(right())}</div><div class="f">载物台位置约 ${stageRead().toFixed(1)}°（转台刻线，只作参考）</div>`;
     $('#'+P+'-v1').classList.toggle('active',s.view==='auto'); $('#'+P+'-v2').classList.toggle('active',s.view==='spec');
     document.querySelectorAll('#'+P+'-tgt .tab').forEach(b=>b.classList.toggle('active',b.dataset.t===tgt));
-    $('#'+P+'-levbox').hidden=s.view!=='auto';
+    $('#'+P+'-levbox').hidden=s.view!=='auto'; $('#'+P+'-assist').disabled=!!s.adv;
     const lv=v=>Math.abs(v)<0.03?'✓ 已调平':'—'; $('#'+P+'-o1').textContent=lv(s.t1); $('#'+P+'-o2').textContent=lv(s.t2);
     $('#'+P+'-onoff').textContent=s.on?'取下三棱镜（测直射光位置）':'放回三棱镜';
-    const c=calc(), nA=c.pairs.length, nG=(c.lines.find(l=>l.w===GREEN)||{rows:[]}).rows.length, others=c.lines.filter(l=>l.w!==GREEN).length;
+    const c=calc(), nA=c.valid.length, nG=(c.lines.find(l=>l.w===GREEN)||{rows:[]}).rows.length, others=c.lines.filter(l=>l.w!==GREEN).length;
     const rec=$('#'+P+'-rec'); rec.textContent = s.view==='auto' ? '记录：顶角（当前光学面）' : s.on ? '记录：最小偏向位置' : '记录：直射光位置';
     renderSteps(P,[
       [levelOK(),'<b>调平三棱镜</b>：在“自准”视图里转望远镜，分别找到 AB、AC 面反射回来的绿十字像，用对应的调平螺丝把像调到分划板<b>上方</b>横线上。'],
-      [nA>=2,`<b>测顶角</b>：载物台不动，望远镜正对 AB 面（十字像与上方叉丝交点重合）时记录，再转到 AC 面记录，算一组。共测 2 组（已完成 ${Math.min(nA,2)}/2）。`],
+      [nA>=2,`<b>测顶角</b>：载物台不动，望远镜正对 AB 面（十字像与上方叉丝交点重合）时记录，再转到 AC 面记录，算一组。共测 2 组有效数据（已完成 ${Math.min(nA,2)}/2）。`],
       [nG>=3,`<b>测最小偏向位置</b>：切到“看光谱”，选“转载物台”，用望远镜跟住<b>绿线</b>，找到它停下并反向的位置，竖直叉丝对准绿线中心后记录。重复 3 次（已记 ${Math.min(nG,3)}/3），每次都重新找一遍转折点。`],
       [c.Z.length>=1,'<b>测直射光位置</b>：点“取下三棱镜”，转望远镜对准白色的狭缝像，记录。'],
       [others>=2||s.checked,`<b>选做：色散</b>：放回三棱镜，对紫、蓝紫、黄等谱线也各找一次最小偏向位置并记录（已测 ${others} 条），结果区会给出 n − 1/λ² 图。`],
@@ -181,10 +183,11 @@ const PM = (() => {
       if (!s.on){ bar(s.Tz,[1,1,1],1); if (Math.abs(s.T-s.Tz)<FOV) near.push('直射光（狭缝像）'); }
       else LINES.forEach(L=>{ const t=lineT(L.w); if (t==null) return; bar(t,wl2rgb(L.w),L.a); if (Math.abs(t-s.T)<FOV) near.push(`${L.w} nm（${L.c}）`); });
       text = near.length ? '' : s.on ? '视场里没有谱线：先看俯视图里折射光的方向，把望远镜转过去' : '视场里没有直射光，继续转动望远镜';
-      if ($('#'+P+'-assist').checked && near.length){ ctr.textContent='视场内：'+near.join('、'); ctr.hidden=false; } else ctr.hidden=true;
+      if ($('#'+P+'-assist').checked && !s.adv && near.length){ ctr.textContent='视场内：'+near.join('、'); ctr.hidden=false; } else ctr.hidden=true;
     }
     ctx.restore();
     ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(S/2,6); ctx.lineTo(S/2,S-6); ctx.moveTo(S*0.15,S/2); ctx.lineTo(S*0.85,S/2); ctx.moveTo(S*0.3,S*0.3); ctx.lineTo(S*0.7,S*0.3); ctx.stroke();
+    if (s.adv && s.on) text='';                                  // 进阶：不给对准、找线的提示
     msg.textContent = Date.now()-flashT<4000 ? flash : text; msg.classList.toggle('low', s.view==='auto');
     $('#'+P+'-cap').textContent = s.view==='auto' ? '望远镜视场：自准法（绿十字反射像）' : s.on ? '望远镜视场：三棱镜折射后的汞灯光谱' : '望远镜视场：直射光';
   }
@@ -197,12 +200,12 @@ const PM = (() => {
     if (s.view==='auto'){
       if (!s.on) return note('自准法测顶角要把三棱镜放在载物台上。');
       const f=faceSeen(); if (!f) return note('视场里没有光学面反射回来的绿十字像：转动望远镜，对准 AB 或 AC 面后再记录。');
-      return push({t:'A', f:f.k, L, R, off:+(f.eps*60).toFixed(1), rho:+s.rho.toFixed(4)});
+      return push({t:'A', f:f.k, L, R, off:+(f.eps*60).toFixed(1), rho:+s.rho.toFixed(4), adv:!!s.adv});
     }
     if (!s.on){ const off=(s.T-s.Tz)*60; if (Math.abs(off)>FOV*60) return note('视场里没有直射光的狭缝像。'); return push({t:'Z', L, R, off:+off.toFixed(1)}); }
     let best=null; LINES.forEach(l=>{ const t=lineT(l.w); if (t!=null && Math.abs(t-s.T)<FOV && (!best||Math.abs(t-s.T)<Math.abs(best.t-s.T))) best={w:l.w,t}; });
     if (!best) return note('视场里没有谱线，先把望远镜转到谱线上。');
-    push({t:'D', w:best.w, L, R, off:+((s.T-best.t)*60).toFixed(1), dm:+((Math.abs(trace(best.w).dev)-dmin(best.w))*60).toFixed(2)});
+    push({t:'D', adv:!!s.adv, w:best.w, L, R, off:+((s.T-best.t)*60).toFixed(1), dm:+((Math.abs(trace(best.w).dev)-dmin(best.w))*60).toFixed(2)});
   }
   function push(row){ s.rows.push(row); stats.records++; logEvent('lab_record',{lab:P,n:s.rows.length,row}); dirty(); }
   function linfit(xs,ys){ const n=xs.length, mx=Unc.mean(xs), my=Unc.mean(ys), sxx=xs.reduce((q,x)=>q+(x-mx)**2,0); if (!(sxx>0)) return null;
@@ -216,7 +219,8 @@ const PM = (() => {
     const dev=r=>Unc.mean(Z.map(z=>(angDiff(r.L,z.L)+angDiff(r.R,z.R))/2));
     const byW={}; D.forEach(r=>{ (byW[r.w]=byW[r.w]||[]).push(r); });
     out.lines=Object.keys(byW).map(Number).sort((a,b)=>a-b).map(w=>{ const ds=Z.length?byW[w].map(dev):[]; return {w,rows:byW[w],ds,d:ds.length?Unc.mean(ds):null}; });
-    if (pairs.length) out.sumA=Unc.summarize(pairs.map(p=>p.A),UB);
+    out.valid=pairs.filter(p=>!p.moved); out.bad=pairs.filter(p=>p.moved);            // 两次读数之间转过载物台的组不参加计算
+    if (out.valid.length) out.sumA=Unc.summarize(out.valid.map(p=>p.A),UB);
     const g=out.lines.find(l=>l.w===GREEN);
     if (out.sumA && g && g.d!=null && out.sumA.mean>0 && out.sumA.mean<180){
       out.sumD=Unc.summarize(g.ds,UB);
@@ -237,14 +241,16 @@ const PM = (() => {
     const c=calc(), p4=v=>v==null?'—':v.toFixed(4)+'°';
     let h='';
     if (c.pairs.length || s.rows.some(r=>r.t==='A')) h+=`<table class="data"><tr><th>组</th><th>AB 左</th><th>AB 右</th><th>AC 左</th><th>AC 右</th><th>φ</th><th>A</th></tr>`+
-      c.pairs.map(p=>`<tr class="${p.moved?'warn':''}"><td>${p.n}</td><td>${dms(p.a.L)}</td><td>${dms(p.a.R)}</td><td>${dms(p.b.L)}</td><td>${dms(p.b.R)}</td><td>${dms(p.phi)}</td><td>${dms(p.A)}</td></tr>`).join('')+
+      c.pairs.map(p=>`<tr class="${p.moved?'warn':''}"><td>${p.n}${p.moved?'（剔除）':''}</td><td>${dms(p.a.L)}</td><td>${dms(p.a.R)}</td><td>${dms(p.b.L)}</td><td>${dms(p.b.R)}</td><td>${dms(p.phi)}</td><td>${dms(p.A)}</td></tr>`).join('')+
       s.rows.filter(r=>r.t==='A').slice(c.pairs.length*2).filter(r=>!c.pairs.some(p=>p.a===r||p.b===r)).map(r=>`<tr><td>—</td><td colspan="6" style="text-align:left">${lab(r)}：${dms(r.L)} / ${dms(r.R)}（等另一个面配成一组）</td></tr>`).join('')+'</table>';
     if (c.D.length || c.Z.length) h+=`<table class="data"><tr><th>位置</th><th>左游标</th><th>右游标</th><th>偏向角 δ</th></tr>`+
       c.Z.map(z=>`<tr><td>直射光</td><td>${dms(z.L)}</td><td>${dms(z.R)}</td><td>—</td></tr>`).join('')+
       c.lines.flatMap(l=>l.rows.map((r,i)=>`<tr><td>${r.w} nm 最小偏向</td><td>${dms(r.L)}</td><td>${dms(r.R)}</td><td>${l.ds[i]!=null?dms(l.ds[i]):'—'}</td></tr>`)).join('')+'</table>';
     $('#'+P+'-table').innerHTML=h;
     let r='';
-    if (c.sumA) r+=`<div class="result">顶角：各组 A = ${c.pairs.map(p=>p4(p.A)).join('、')}${c.pairs.some(p=>p.moved)?'<div class="note">有一组的两次读数之间载物台被转动过，这一组的 A 不可靠。</div>':''}${Unc.html(c.sumA,'A','°')}</div>`;
+    const badNote=c.bad.length?`<div class="note">第 ${c.bad.map(p=>p.n).join('、')} 组的两次读数之间载物台被转动过，φ 里混进了棱镜转过的角度，这是<b>操作错误</b>，不是随机误差，多测几次也平均不掉，所以已从计算中剔除（原始读数保留在表里）。请载物台保持不动，补测一组。</div>`:'';
+    if (c.sumA) r+=`<div class="result">顶角：有效各组 A = ${c.valid.map(p=>p4(p.A)).join('、')}${badNote}${Unc.html(c.sumA,'A','°')}</div>`;
+    else if (c.bad.length) r+=`<div class="result">${badNote}</div>`;
     else if (s.rows.some(r=>r.t==='A')) r+='<div class="hint">顶角需要 AB、AC 两个面各一次读数配成一组。</div>';
     if (c.D.length && !c.Z.length) r+='<div class="hint">还没有直射光位置：取下三棱镜测一次，才能算出偏向角。</div>';
     if (c.sumD){ const f=Unc.format(c.n,c.un,''), pf=v=>(+v.toPrecision(3)).toString();
@@ -256,6 +262,7 @@ const PM = (() => {
     const ls=c.lines.filter(l=>l.n!=null&&l.w!==GREEN);
     if (ls.length){ r+=`<div class="result">色散（选做）：${c.lines.filter(l=>l.n!=null).map(l=>`λ = ${l.w} nm，n = ${l.n.toFixed(4)}`).join('；')}
       ${c.fit?`<div>按柯西公式 n = a + b/λ² 拟合：a = ${c.fit.a.toFixed(4)}，b = ${(c.fit.b*1e6).toExponential(3)} nm²。波长越短 n 越大（正常色散）。</div>`:'<div class="hint">再测一条谱线（至少 3 条）就能作 n − 1/λ² 图。</div>'}</div>`; }
+    const D=s.rows.filter(x=>x.t==='D'); if (D.length && D.every(x=>x.adv)) r+='<div class="hint">最小偏向位置是在“进阶：少提示”模式下自己判断的。</div>';
     $('#'+P+'-result').innerHTML=r||'<div class="hint">继续测量：顶角需要成组的数据，偏向角需要直射光位置。</div>';
     typeof Learn!=='undefined' && Learn.graphs(P, c.fit?[{title:'色散 n − 1/λ² 图（柯西公式）', pts:c.pts, fit:c.fit, xl:'1/λ² / µm⁻²', yl:'n', derive:(k,a)=>`柯西系数 a = ${a.toFixed(4)}，b = 斜率 = ${k.toFixed(4)} µm²`}]:[]);
   }
@@ -263,8 +270,8 @@ const PM = (() => {
   /* ---------- AI 批改 ---------- */
   function issues(c){
     const p=[];
-    if (c.pairs.length<2) p.push(`顶角只测了 ${c.pairs.length} 组，建议至少 2 组`);
-    if (c.pairs.some(x=>x.moved)) p.push(`第 ${c.pairs.filter(x=>x.moved).map(x=>x.n).join('、')} 组测顶角时，两次读数之间载物台被转动了，φ 里混进了棱镜转过的角度`);
+    if (c.valid.length<2) p.push(`顶角只有 ${c.valid.length} 组有效数据，建议至少 2 组`);
+    if (c.bad.length) p.push(`第 ${c.bad.map(x=>x.n).join('、')} 组测顶角时，两次读数之间载物台被转动了，φ 里混进了棱镜转过的角度，已剔除，应补测`);
     const offA=s.rows.filter(r=>r.t==='A'&&Math.abs(r.off)>1); if (offA.length) p.push(`${offA.map(lab).join('、')}记录时十字像没有和叉丝交点重合（偏 ${offA.map(r=>Math.abs(r.off).toFixed(1)+'′').join('、')}）`);
     const far=s.rows.filter(r=>r.t==='D'&&r.dm>1); if (far.length) p.push(`${far.map(lab).join('、')}记录时棱镜不在最小偏向位置，偏向角多了 ${far.map(r=>r.dm.toFixed(1)+'′').join('、')}`);
     const loose=s.rows.filter(r=>(r.t==='D'||r.t==='Z')&&Math.abs(r.off)>1.5); if (loose.length) p.push(`${loose.map(lab).join('、')}竖直叉丝没有压在谱线（狭缝像）中心（偏 ${loose.map(r=>Math.abs(r.off).toFixed(1)+'′').join('、')}）`);
@@ -272,7 +279,7 @@ const PM = (() => {
     return p;
   }
   function offline(c){
-    const p=issues(c), level=Math.abs(c.err)<0.03?'很好':Math.abs(c.err)<0.1?'基本合格':'偏差较大', g=c.pairs[0];
+    const p=issues(c), level=Math.abs(c.err)<0.03?'很好':Math.abs(c.err)<0.1?'基本合格':'偏差较大', g=c.valid[0];
     return [`【总评】顶角 A = ${Unc.format(c.sumA.mean,c.sumA.u,'°').text}，最小偏向角 δ = ${Unc.format(c.sumD.mean,c.sumD.u,'°').text}，算得 n = ${Unc.format(c.n,c.un,'').text}，与这块玻璃的折射率 ${nOf(GREEN).toFixed(5)} 相对偏差 ${c.err.toFixed(3)}%，结果${level}。${c.fit?`还测了色散，柯西系数 a = ${c.fit.a.toFixed(4)}、b = ${(c.fit.b*1e6).toExponential(2)} nm²。`:''}`,
       '【数据问题】'+(p.length?p.join('；')+'。':'没有发现明显问题。')+(g?` 第 1 组只用左游标算的 φ 与只用右游标算的相差约 ${(Math.abs(g.pL-g.pR)*60).toFixed(1)}′，这就是度盘偏心差，两游标取平均后已消除。`:''),
       `【误差来源】n 的不确定度里，来自顶角的约 ${(+c.fromA.toPrecision(2))}，来自偏向角的约 ${(+c.fromD.toPrecision(2))}，${c.fromA>c.fromD?'顶角是主要来源':'偏向角是主要来源'}。具体是：十字像或谱线与叉丝的对准误差、游标读数误差（1′）、最小偏向位置判断不准（它对 δ 是二阶影响，较小）、棱镜没调平。`,
@@ -281,13 +288,13 @@ const PM = (() => {
   function review(){
     const c=calc();
     runReview(P,{
-      check:()=>!c.sumA?'先测顶角：AB、AC 两个面各记录一次，配成一组。':!c.sumD?'还需要绿线的最小偏向位置和直射光位置，才能算折射率。':'',
+      check:()=>!c.sumA?(c.bad.length?'顶角没有有效数据：已记录的组在两次读数之间都转动过载物台，请补测。':'先测顶角：AB、AC 两个面各记录一次，配成一组。'):!c.sumD?'还需要绿线的最小偏向位置和直射光位置，才能算折射率。':'',
       prompt:()=>`你是大学物理实验课的助教，正在批改大一学生“分光计测三棱镜折射率（最小偏向角法）”的实验数据。A = 180° − φ（φ 为自准法两次望远镜方位差，取左右游标平均），δ_min = 最小偏向位置与直射光位置之差，n = sin[(A+δ)/2]/sin(A/2)，光源为汞灯绿线 546.1 nm。
-顶角数据：${c.pairs.map(p=>`第 ${p.n} 组：AB 面 ${dms(p.a.L)}/${dms(p.a.R)}，AC 面 ${dms(p.b.L)}/${dms(p.b.R)}，φ=${dms(p.phi)}（只用左游标 ${p.pL.toFixed(4)}°，只用右游标 ${p.pR.toFixed(4)}°），A=${p.A.toFixed(4)}°${p.moved?'（两次读数之间载物台被转动过）':''}`).join('；')}。${Unc.line(c.sumA,'A','°')}
+顶角数据：${c.pairs.map(p=>`第 ${p.n} 组：AB 面 ${dms(p.a.L)}/${dms(p.a.R)}，AC 面 ${dms(p.b.L)}/${dms(p.b.R)}，φ=${dms(p.phi)}（只用左游标 ${p.pL.toFixed(4)}°，只用右游标 ${p.pR.toFixed(4)}°），A=${p.A.toFixed(4)}°${p.moved?'（两次读数之间载物台被转动过，已从平均中剔除）':''}`).join('；')}。${Unc.line(c.sumA,'A','°')}
 直射光：${c.Z.map(z=>`${dms(z.L)}/${dms(z.R)}`).join('；')}。最小偏向（绿线）：${c.lines.find(l=>l.w===GREEN).rows.map((r,i)=>`${dms(r.L)}/${dms(r.R)}，δ=${c.lines.find(l=>l.w===GREEN).ds[i].toFixed(4)}°`).join('；')}。${Unc.line(c.sumD,'δ','°')}
 n = ${c.n.toFixed(5)}，u(n) = ${c.un.toExponential(2)}（来自顶角 ${c.fromA.toExponential(2)}，来自偏向角 ${c.fromD.toExponential(2)}）。这块玻璃真实折射率 ${nOf(GREEN).toFixed(5)}，真实顶角 ${s.A.toFixed(4)}°，相对偏差 ${c.err.toFixed(3)}%。
 ${c.lines.filter(l=>l.n!=null&&l.w!==GREEN).length?`其他谱线：${c.lines.filter(l=>l.n!=null).map(l=>`${l.w} nm n=${l.n.toFixed(4)}`).join('，')}${c.fit?`；柯西拟合 a=${c.fit.a.toFixed(4)}，b=${(c.fit.b*1e6).toExponential(3)} nm²`:''}。`:'学生没有做色散选做。'}
-系统记录的操作问题：${issues(c).join('；')||'无'}。
+操作模式：${s.rows.filter(x=>x.t==='D').every(x=>x.adv)?'进阶（无转折点和对准提示，学生自己判断）':'普通（有转折点提示）'}。系统记录的操作问题：${issues(c).join('；')||'无'}。
 请给出批改意见：中文，250~350 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。【误差来源】里结合两项不确定度的大小说明主要误差来自顶角还是偏向角；可以说明为什么最小偏向位置不需要找得特别准。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });

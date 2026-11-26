@@ -409,8 +409,10 @@ details.rawdata[open] summary{margin-bottom:4px}
 .th-t{font-size:13.5px;color:var(--ink);line-height:1.7}
 .th-q textarea{width:100%;box-sizing:border-box;margin-top:4px;font:inherit;font-size:13.5px;line-height:1.6;border:1px solid var(--hair);border-radius:6px;padding:6px 9px;background:#fff;resize:vertical}
 .th-q textarea:focus{outline:2px solid var(--coat);outline-offset:-1px;border-color:transparent}
+.th-r.stale{color:var(--warn,#a5552a)}
 .th-r{margin-top:4px;font-size:13px;color:#33373D;padding:6px 10px;background:var(--coat-soft);border-radius:6px;line-height:1.6}
 .th-r b{color:var(--coat)}
+.th-r.stale b{color:inherit}
 .follow{padding:10px 12px;border:1px solid #ecd49c;background:#fffaf0;border-radius:8px}
 
 /* ---------- 作图法 ---------- */

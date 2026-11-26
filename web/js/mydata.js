@@ -313,6 +313,8 @@ const MyData = (() => {
         });
         out.table += sub('测顶角（自准法）', true) + T(['组', 'AB 左', 'AB 右', 'AC 左', 'AC 右', 'φ', 'A'], items.map(x => [x.no, x.raw.a1, x.raw.a2, x.raw.b1, x.raw.b2, dms(x.phi), dms(x.A)]));
         const ok = items.filter(x => x.A > 0 && x.A < 180);
+        if (ok.length > 1){ const As = ok.map(x => x.A), sp = (Math.max(...As) - Math.min(...As)) * 60;
+          if (sp > 4) out.issues.push(`顶角各组相差 ${sp.toFixed(0)}′，远大于游标读数误差：检查是否有一组在两次读数之间碰了载物台，或调平、对准没做好。这类操作错误不能靠平均消除，应找出原因后补测，再把那一组删掉`); }
         if (ok.length){ sumA = Unc.summarize(ok.map(x => x.A), uB);
           out.result += `<div class="result">顶角：各组 A = ${ok.map(x => x.A.toFixed(4) + '°').join('、')}（${ok.map(x => dms(x.A)).join('、')}）${Unc.html(sumA, 'A', '°')}${ok.length < 2 ? '<div class="hint">建议至少测 2 组。</div>' : ''}</div>`;
           out.ai.push(`顶角：各组（AB 左/右，AC 左/右）${items.map(x => `(${x.raw.a1}, ${x.raw.a2}, ${x.raw.b1}, ${x.raw.b2})`).join('；')}；A = ${ok.map(x => x.A.toFixed(4)).join('、')}°；${Unc.line(sumA, 'A', '°')}。`);

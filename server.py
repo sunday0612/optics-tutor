@@ -28,7 +28,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import report
 
 APP_NAME = "光影助教"
-APP_VERSION = "1.11.0"
+APP_VERSION = "1.12.0"
 
 
 # ---------------- 路径 ----------------

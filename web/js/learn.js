@@ -190,9 +190,13 @@ const Learn = (() => {
     const mx=nice(Math.max(...xs)-Math.min(...xs)||1), my=nice((Math.max(...ys)-Math.min(...ys))||1);
     const X0=Math.floor(Math.min(...xs)/mx)*mx-mx, X1=Math.ceil(Math.max(...xs)/mx)*mx+mx, Y0=Math.floor(Math.min(...ys)/my)*my-my, Y1=Math.ceil(Math.max(...ys)/my)*my+my;
     const ym=Unc.mean(ys), H=[[X0+(X1-X0)*0.15, ym],[X1-(X1-X0)*0.15, ym]];
+    /* 学生取的两点、斜率、比较结果和解释都存下来写进报告；数据变了就作废重画 */
+    const gsig=JSON.stringify(g.pts), all=ex(P).graph||(ex(P).graph={});
+    let sv=all[g.title]; if (!sv||sv.sig!==gsig) sv=all[g.title]={sig:gsig}; else if (sv.H) sv.H.forEach((h,i)=>H[i]=h.slice());
     const snap=(v,step)=>Math.round(v/(step/10))*(step/10), dec=step=>Math.max(0,-Math.floor(Math.log10(step/10)+1e-9));
     el.innerHTML=`<div class="hint">拖动两个圆点，目测画一条最能代表这些数据点的直线（让点均匀分布在线的两侧）。斜率要用<b>直线上另取的两点</b>来算，两点尽量离得远，不要直接用数据点。坐标估读到小格的 1/2。</div>
-      <canvas class="gw"></canvas><div class="gw-out"></div><div class="row" style="margin-top:6px"><button class="ghost mini" data-gw-cmp>和最小二乘拟合比较</button></div><div class="gw-cmp"></div>`;
+      <canvas class="gw"></canvas><div class="gw-out"></div><div class="row" style="margin-top:6px"><button class="ghost mini" data-gw-cmp>和最小二乘拟合比较</button></div><div class="gw-cmp"></div>
+      <div class="gw-ex" hidden><div class="th-t">两种斜率为什么不同？哪一个更可信？（结合你取的两点、有没有偏离直线的数据点来说明，会写进实验报告）</div><textarea rows="2" placeholder="用一两句话说明"></textarea></div>`;
     const cv=el.querySelector('canvas'); let geo=null, drag=-1;
     function draw(){
       if (!cv.clientWidth) return whenVisible(cv, draw);
@@ -218,20 +222,24 @@ const Learn = (() => {
       if (g.pts.some(([x,y])=>H.some(([hx,hy])=>Math.abs(hx-x)<(X1-X0)*0.015&&Math.abs(hy-y)<(Y1-Y0)*0.03))) warn.push('有一个取点和数据点重合了：求斜率要在画好的直线上另取两点');
       const fx=v=>v.toFixed(dec(mx)), fy=v=>v.toFixed(dec(my));
       el.querySelector('.gw-out').innerHTML=`<div>A（${fx(a[0])}，${fy(a[1])}），B（${fx(b[0])}，${fy(b[1])}）</div><div>斜率 k = (y<sub>B</sub> − y<sub>A</sub>)/(x<sub>B</sub> − x<sub>A</sub>) = <b>${Number.isFinite(k)?+k.toPrecision(4):'—'}</b>，截距 ${Number.isFinite(c)?+c.toPrecision(4):'—'}${Number.isFinite(k)&&g.derive?`；${g.derive(k,c)}`:''}</div>${warn.length?`<div class="note">${warn.join('；')}。</div>`:''}`;
-      el._k=k; el._c=c;
+      el._k=k; el._c=c; Object.assign(sv,{H:H.map(h=>h.slice()), A:a, B:b, k, c, warn:warn.length?warn.join('；'):''});
     }
     cv.addEventListener('pointerdown',e=>{ if (!geo) return; const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
       drag=H.findIndex(([x,y])=>Math.hypot(geo.Xp(x)-px,geo.Yp(y)-py)<14); if (drag>=0){ cv.setPointerCapture(e.pointerId); e.preventDefault(); } });
     cv.addEventListener('pointermove',e=>{ if (drag<0||!geo) return; const r=cv.getBoundingClientRect(), [x,y]=geo.inv(Math.min(geo.R,Math.max(geo.L,e.clientX-r.left)),Math.min(geo.B,Math.max(geo.T,e.clientY-r.top))); H[drag]=[x,y]; draw(); });
-    ['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev,()=>{ if (drag>=0) logEvent('graph_line',{lab:P}); drag=-1; }));
+    ['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev,()=>{ if (drag>=0){ logEvent('graph_line',{lab:P}); sv.moved=true; if (sv.diff!=null){ delete sv.diff; el.querySelector('.gw-cmp').innerHTML='<div class="hint">直线改过了，请重新比较。</div>'; } persist(P); } drag=-1; }));
+    const exa=el.querySelector('.gw-ex textarea'); exa.value=sv.expl||'';
+    exa.addEventListener('change',()=>{ sv.expl=exa.value.trim(); persist(P); });
     el.querySelector('[data-gw-cmp]').onclick=()=>{
       const box=el.querySelector('.gw-cmp');
       if (prefs.calc==='must' && !selfDone(P)){ box.innerHTML='<div class="note">老师设置为必须先自己算：先在“我先算”里算对结果，再和最小二乘比较。</div>'; return; }
-      const f=g.fit, k=el._k, d=(k-f.b)/f.b*100;
+      const f={...g.fit, sb:g.fit.sb!=null&&g.fit.sb>Math.abs(g.fit.b)*1e-9?g.fit.sb:null}, k=el._k, d=(k-f.b)/f.b*100;   // 数据恰好在直线上时 sb≈0，不再报“标准差的多少倍”
       box.innerHTML=`<div class="inq-r">最小二乘：斜率 ${f.sb!=null?Unc.format(f.b,f.sb,'').text:+f.b.toPrecision(4)}，截距 ${+f.a.toPrecision(4)}${g.derive?`；${g.derive(f.b,f.a)}`:''}。<br>你的作图斜率与它相差 <b>${d>=0?'+':''}${d.toFixed(1)}%</b>${f.sb!=null?`，${Math.abs(k-f.b)<=f.sb?'在最小二乘斜率的标准差之内':`约为斜率标准差的 ${(Math.abs(k-f.b)/f.sb).toFixed(1)} 倍`}`:''}。作图法直观、能一眼看出可疑点，但直线靠目测，因人而异；最小二乘法客观，并且能给出斜率的不确定度。</div>`;
+      el.querySelector('.gw-ex').hidden=false; sv.diff=+d.toFixed(2); sv.fitk=f.b; sv.fitsb=f.sb; persist(P);
       logEvent('graph_compare',{lab:P, diff:+d.toFixed(2)});
     };
     draw();
+    if (sv.diff!=null) el.querySelector('[data-gw-cmp]').onclick();
   }
   /* 实测页调用：list 为 [{title, pts, fit, xl, yl, derive}]，数据没变时不重建（保留学生画的线） */
   function graphs(P, list){
@@ -266,20 +274,32 @@ const Learn = (() => {
         {q:'出瞳的位置和大小有什么实际意义？', keys:[{t:'眼睛瞳孔要放在出瞳处才能看到完整视场',k:['眼睛','瞳孔','视场']},{t:'出瞳距决定眼睛离目镜多远',k:['出瞳距','眼点','距离']},{t:'出瞳直径影响像的亮度',k:['亮度','明亮','光通量']}]}],
   };
   const thinkOf=P=>THINK[P]||(P[0]==='u'?THINK[P.slice(1)]:null);
+  /* 回答里提到某个关键词，且前面不是“不/没/非/无/未”这类否定（例如“光路不对称”不算提到“对称”） */
+  function mentions(a,w){ for (let i=a.indexOf(w); i>=0; i=a.indexOf(w,i+1)){ if (!/[不没非无未]/.test(a.slice(Math.max(0,i-2),i)) || /^[不没非无未]/.test(w)) return true; } return false; }
   function renderThink(P){
     const box=document.getElementById(P+'-think'), qs=thinkOf(P); if (!box||!qs) return;
     const st=ex(P).think||{ans:[], res:null};
     box.innerHTML=`<h2><span class="n">思考</span>思考题</h2>${qs.map((q,i)=>`<div class="th-q"><div class="th-t">${i+1}. ${esc(q.q)}</div><textarea data-th="${P}" data-i="${i}" rows="3" placeholder="用自己的话回答，写出关键的物理原因">${esc(st.ans[i]||'')}</textarea>
-        ${st.res?.[i]?`<div class="th-r"><b>${st.res[i].score} / 5 分</b>　${esc(st.res[i].comment||'')}</div>`:''}</div>`).join('')}
-      <div class="row" style="margin-top:8px"><button class="ghost" data-th-go="${P}">提交并评分</button><span class="hint" id="${P}-th-msg">${st.res?`合计 ${st.res.reduce((a,r)=>a+(+r.score||0),0)} / ${qs.length*5} 分${st.by==='rule'?'（离线按关键词评分）':'（AI 按要点评分）'}`:'按要点评分，每题 5 分'}</span></div>`;
+        ${st.res?.[i]?`<div class="th-r${thStale(st,i)?' stale':''}" data-th-r="${P}" data-i="${i}">${thLine(st,i)}</div>`:''}</div>`).join('')}
+      <div class="row" style="margin-top:8px"><button class="ghost" data-th-go="${P}">${st.res?'重新提交':'提交'}</button><span class="hint" id="${P}-th-msg">${thTotal(st,qs)}</span></div>`;
   }
-  document.addEventListener('input', e=>{ const a=e.target.closest?.('textarea[data-th]'); if (!a) return; const st=ex(a.dataset.th).think||(ex(a.dataset.th).think={ans:[], res:null}); st.ans[+a.dataset.i]=a.value; });
+  /* 评分绑定到提交时的答案：改过答案后原评分作废，等重新提交 */
+  const thStale=(st,i)=>!!st.res?.[i] && (st.graded?.[i]??st.ans[i])!==(st.ans[i]||'');
+  function thLine(st,i){ const r=st.res[i];
+    if (thStale(st,i)) return '<b>答案已修改</b>　原评分作废，请重新提交。';
+    return st.by==='rule' ? `<b>关键词自查：提到 ${r.hit??'—'} / ${r.of??'—'} 个要点</b>　${esc(r.comment||'')}` : `<b>${r.score} / 5 分</b>　${esc(r.comment||'')}`; }
+  function thTotal(st,qs){ if (!st.res) return 'AI 按要点评分，每题 5 分；离线时只做关键词自查，不计分';
+    if (qs.some((q,i)=>thStale(st,i))) return '有答案在评分后改过，需要重新提交';
+    return st.by==='rule' ? '离线关键词自查，仅供自己检查，不作为成绩；由教师按要点复核' : `合计 ${st.res.reduce((a,r)=>a+(+r.score||0),0)} / ${qs.length*5} 分（AI 按要点评分，供教师复核）`; }
+  document.addEventListener('input', e=>{ const a=e.target.closest?.('textarea[data-th]'); if (!a) return; const P=a.dataset.th, i=+a.dataset.i, st=ex(P).think||(ex(P).think={ans:[], res:null}); st.ans[i]=a.value.trim();
+    const r=document.querySelector(`[data-th-r="${P}"][data-i="${i}"]`); if (r){ r.classList.toggle('stale',thStale(st,i)); r.innerHTML=thLine(st,i); const m=document.getElementById(P+'-th-msg'); if (m) m.textContent=thTotal(st,thinkOf(P)); }
+    if (st.res) persist(P); });
   document.addEventListener('click', async e=>{ const b=e.target.closest?.('[data-th-go]'); if (!b) return; const P=b.dataset.thGo, qs=thinkOf(P), st=ex(P).think||(ex(P).think={ans:[], res:null});
     document.querySelectorAll(`textarea[data-th="${P}"]`).forEach(a=>{ st.ans[+a.dataset.i]=a.value.trim(); });
     if (st.ans.filter(Boolean).length<qs.length){ $('#'+P+'-th-msg').textContent='每道题都写一写再提交。'; return; }
     b.disabled=true; $('#'+P+'-th-msg').textContent='正在评分…';
-    const rule=()=>qs.map((q,i)=>{ const a=st.ans[i]||'', hit=q.keys.filter(k=>k.k.some(w=>a.includes(w))), sc=Math.round(hit.length/q.keys.length*10)/2;
-      return {score:sc, comment:hit.length===q.keys.length?'要点齐全。':'还可以补充：'+q.keys.filter(k=>!hit.includes(k)).map(k=>k.t).join('；')}; });
+    const rule=()=>qs.map((q,i)=>{ const a=st.ans[i]||'', hit=q.keys.filter(k=>k.k.some(w=>mentions(a,w)));
+      return {score:Math.round(hit.length/q.keys.length*10)/2, hit:hit.length, of:q.keys.length, comment:(hit.length===q.keys.length?'关键词都提到了，':'还没提到：'+q.keys.filter(k=>!hit.includes(k)).map(k=>k.t).join('；')+'。')+'关键词匹配看不出说法对不对，请对照要点自己检查。'}; });
     let res=null, by='ai';
     try { await AI.ready;
       if (AI.online()){ const t=await aiText(`你是大学物理实验课的助教，给大一学生的思考题回答评分。每题满分 5 分，按要点给分（意思对即可，不必逐字相同；错误的说法要扣分）。只输出 JSON，格式：{"scores":[{"score":分数,"comment":"不超过 60 字的点评，指出答对的要点和缺少的要点"}]}，数组顺序与题目一致，分数可以是 0.5 的倍数。
@@ -288,7 +308,7 @@ ${qs.map((q,i)=>`第 ${i+1} 题：${q.q}\n要点：${q.keys.map(k=>k.t).join('�
         if (j&&Array.isArray(j.scores)&&j.scores.length===qs.length) res=j.scores.map(x=>({score:Math.max(0,Math.min(5,Math.round((+x.score||0)*2)/2)), comment:String(x.comment||'').slice(0,120)})); }
     } catch(err){}
     if (!res){ res=rule(); by='rule'; }
-    st.res=res; st.by=by; persist(P); renderThink(P); logEvent('think_score',{lab:P, by, total:res.reduce((a,r)=>a+r.score,0)});
+    st.res=res; st.by=by; st.graded=st.ans.slice(); persist(P); renderThink(P); logEvent('think_score',{lab:P, by, total:res.reduce((a,r)=>a+r.score,0)});
   });
 
   /* ================= 8. AI 批改前的追问 ================= */
@@ -349,7 +369,12 @@ ${qa.map((x,i)=>`问${i+1}：${x.q}\n答：${x.a}`).join('\n')}
     const d=DESIGNS[P];
     if (d && e.des?.tries) blocks.push({p:[{t:`方案优化（${d.title}）：`,b:true},{t:d.fields.map(f=>`${f.label.replace(/<[^>]+>/g,'')} 答 ${e.des.in[f.k]||'—'}${e.des.ok[f.k]?'（正确）':`（参考 ${fmtNum(f.answer())}）`}`).join('；')+'。'}]});
     const th=thinkOf(P);
-    if (th && e.think?.ans?.some(Boolean)) th.forEach((q,i)=>blocks.push({p:[{t:`思考题 ${i+1}：`,b:true},{t:q.q}]},{p:[{t:'回答：',b:true},{t:e.think.ans[i]||'（未作答）'}]},...(e.think.res?.[i]?[{p:[{t:`得分 ${e.think.res[i].score}/5：`,b:true},{t:e.think.res[i].comment||''}]}]:[])));
+    if (th && e.think?.ans?.some(Boolean)) th.forEach((q,i)=>{ const st=e.think, r=st.res?.[i];
+      blocks.push({p:[{t:`思考题 ${i+1}：`,b:true},{t:q.q}]},{p:[{t:'回答：',b:true},{t:st.ans[i]||'（未作答）'}]});
+      blocks.push({p:[{t:'评分：',b:true},{t:!r?'未提交评分（待教师按要点评分）。':thStale(st,i)?'回答在评分后修改过，未重新评分（待教师复核）。':st.by==='rule'?`离线关键词自查，提到 ${r.hit??'—'}/${r.of??'—'} 个要点，不计分（待教师按要点复核）。`:`AI 按要点评 ${r.score}/5 分（待教师复核）：${r.comment||''}`}]}); });
+    Object.entries(e.graph||{}).forEach(([title,v])=>{ if (!v.moved||!v.A) return; const n=x=>+(+x).toPrecision(5);
+      blocks.push({p:[{t:`作图法（${title}）：`,b:true},{t:`在直线上取 A(${n(v.A[0])}, ${n(v.A[1])})、B(${n(v.B[0])}, ${n(v.B[1])})，作图斜率 k = ${n(v.k)}${v.warn?`（程序提示：${v.warn}）`:''}；`+(v.diff!=null?`最小二乘斜率 ${n(v.fitk)}${v.fitsb!=null?` ± ${+v.fitsb.toPrecision(2)}`:''}，两者相差 ${v.diff}%。`:'未与最小二乘比较。')}]},
+        {p:[{t:'学生对差异的解释：',b:true},{t:v.expl||'（未填写）'}]}); });
     if (e.follow?.length) e.follow.forEach((x,i)=>blocks.push({p:[{t:`AI 追问 ${i+1}：`,b:true},{t:x.q+' '},{t:'学生回答：',b:true},{t:x.a}]}));
     if (t && e.inq?.tries) blocks.push({p:[{t:`探究任务（${t.title}）：`,b:true},{t:`答案 ${e.inq.in} ${t.unit||''}，${e.inq.pass?`第 ${e.inq.tries} 次正确。`:`提交 ${e.inq.tries} 次未通过（参考值 ${fmtNum(t.answer())}）。`}`}]});
     return blocks;

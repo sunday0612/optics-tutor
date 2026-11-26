@@ -41,6 +41,10 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
  assert(Math.abs(vm.runInContext('MI.calc().mean',labs)-632.8)<1e-6);
  vm.runInContext(`const phi=Math.asin(546.1/(1e6/600))*180/Math.PI; SP.s.rows=[{n:1,k:1,L:180+phi,R:phi},{n:1,k:-1,L:180-phi,R:360-phi}]`,labs);
  assert(Math.abs(vm.runInContext('SP.calc().mean',labs)-1e6/600)<1e-6);
+ // v1.12.0：思考题离线关键词自查识别否定（“不对称”不算提到“对称”）
+ { const src=fs.readFileSync(path.join(__dirname,'../web/js/learn.js'),'utf8'), m=src.match(/function mentions\(a,w\)\{[^\n]*\n?/);
+   assert(m, 'mentions() not found'); const mentions=new Function(m[0]+';return mentions;')();
+   assert(mentions('光路对称时 i1=i2','对称') && !mentions('最小偏向时光路不对称','对称') && !mentions('没有对称','对称') && mentions('转折处不敏感','不敏感'), 'negation-aware keyword check'); }
  // v1.11.0：三棱镜——用理想读数反推出顶角、折射率和柯西系数
  { const R=vm.runInContext('PM',labs), s=R.s; s.e=0;
    const rd=th=>({L:s.Tz+th, R:s.Tz+th+180}), r0=R.rhoMin(), d=R.trace(546.1,r0).dev, sg=Math.sign(d);
@@ -51,7 +55,9 @@ assert.equal($('#explain').innerHTML,vm.runInContext('PRINCIPLE.newton',c));asse
    assert(Math.abs(c.sumA.mean-s.A)<1e-9 && Math.abs(c.n-R.nOf(546.1))<1e-9, `prism n ${c.n} vs ${R.nOf(546.1)}`);
    assert(Math.abs(c.fit.a-s.ga)<1e-3 && Math.abs(c.fit.b*1e6-s.gb)/s.gb<0.05, `cauchy ${c.fit.a} ${c.fit.b}`);
    assert(c.un>0 && c.un<5e-4 && c.fromA>0 && c.fromD>0);
-   s.rows[1]={...s.rows[1],rho:s.rho+1}; assert(R.calc().pairs[0].moved);
+   // v1.12.0：两次读数之间转过载物台的组从顶角计算中剔除
+   s.rows[1]={...s.rows[1],rho:s.rho+1, L:s.rows[1].L+6, R:s.rows[1].R+6}; { const c2=R.calc(); assert(c2.pairs[0].moved && c2.valid.length===1 && c2.bad.length===1 && Math.abs(c2.sumA.mean-s.A)<1e-9 && c2.n!=null, 'moved pair must be excluded'); }
+   s.rows[3]={...s.rows[3],rho:s.rho+1}; { const c3=R.calc(); assert(!c3.sumA && c3.n==null && c3.bad.length===2, 'no valid apex pairs'); }
    const sh=R.shift(2); assert(sh>1 && sh<20 && R.shift(0.5)<sh/10, 'quadratic shift '+sh); }
  const readings=(k,left,right)=>[
   {side:'L',k,x:left,off:0},

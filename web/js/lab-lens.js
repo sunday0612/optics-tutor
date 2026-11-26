@@ -224,6 +224,11 @@ const LN = (() => {
     const items=[...m.values()].filter(g=>g.big.length&&g.small.length).map(g=>{ const x1=Unc.mean(g.big), x2=Unc.mean(g.small), D=g.xs-XO, d=Math.abs(x2-x1);
       return {D, x1, x2, d, f:(D*D-d*d)/(4*D)}; });
     const bessel={items, groups:[...m.values()]};
+    /* 方案验证：同一 D 重复调焦时，第 k 次大像与第 k 次小像配对，看同一 D 下 f 的离散 */
+    bessel.rep=[...m.values()].map(g=>{ const n=Math.min(g.big.length,g.small.length), D=g.xs-XO; if (n<2) return null;
+      const fs=[...Array(n)].map((_,k)=>{ const d=Math.abs(g.small[k]-g.big[k]); return (D*D-d*d)/(4*D); });
+      const sd=a=>Math.sqrt(a.reduce((q,v)=>q+(v-Unc.mean(a))**2,0)/(a.length-1));
+      return {D, n, d:Math.abs(Unc.mean(g.small)-Unc.mean(g.big)), sx1:sd(g.big), sx2:sd(g.small), f:Unc.mean(fs), sf:sd(fs)}; }).filter(Boolean).sort((a,b)=>a.D-b.D);
     if (items.length){ const uD=Math.SQRT2*INST/Unc.SQRT3, ud=uD;
       const uB=Unc.mean(items.map(x=>Math.hypot((x.D*x.D+x.d*x.d)/(4*x.D*x.D)*uD, x.d/(2*x.D)*ud)));
       Object.assign(bessel,{sum:Unc.summarize(items.map(x=>x.f),uB)}); bessel.mean=bessel.sum.mean; bessel.err=(bessel.mean-s.f)/s.f*100; }
@@ -254,7 +259,8 @@ const LN = (() => {
     if (b.sum){ const f=Unc.format(b.mean,b.sum.u,'mm');
       out+=`<div class="result">二次成像法：${b.items.map(x=>x.f.toFixed(1)).join('、')} mm
         <div>平均 f = <span class="big">${b.mean.toFixed(1)} mm</span></div>${Unc.html(b.sum,'f','mm')}
-        ${s.checked?`<div>透镜真实焦距 ${s.f.toFixed(1)} mm，相对误差 <b>${b.err>=0?'+':''}${b.err.toFixed(2)}%</b></div>`:'<div class="hint">真实焦距在 AI 批改后显示。</div>'}</div>`; }
+        ${s.checked?`<div>透镜真实焦距 ${s.f.toFixed(1)} mm，相对误差 <b>${b.err>=0?'+':''}${b.err.toFixed(2)}%</b></div>`:'<div class="hint">真实焦距在 AI 批改后显示。</div>'}</div>`;
+      out+=repHtml(b); }
     if (a.n1||a.n2){
       out+=`<div class="result">自准法：${a.f1!=null?`正向 f₁ = ${a.f1.toFixed(1)} mm`:'正向还没测'}；${a.f2!=null?`反向 f₂ = ${a.f2.toFixed(1)} mm`:'反向还没测'}
         ${a.mean!=null?`<div>取平均 f = (f₁ + f₂)/2 = <span class="big">${a.mean.toFixed(1)} mm</span>，两次之差的一半 ${Math.abs(a.delta).toFixed(1)} mm 就是读数指标与透镜主面的偏差</div>${Unc.html(a.sum,'f','mm')}
@@ -286,11 +292,21 @@ const LN = (() => {
       check:()=>c.bessel.sum||c.auto.mean!=null?'':'至少需要一组完整的二次成像数据（同一屏位置的大像和小像），或自准法正反两个方向的数据。',
       prompt:()=>`你是大学应用光学实验课的助教，正在批改大一学生“光具座测凸透镜焦距”的实验数据。透镜真实焦距 ${s.f.toFixed(1)} mm，透镜架读数指标与主面相差 ${s.dl.toFixed(1)} mm（学生不知道）。物在 ${XO} mm。
 二次成像法：${c.bessel.items.map(x=>`D=${x.D} mm，大像 x₁=${x.x1.toFixed(1)}，小像 x₂=${x.x2.toFixed(1)}，d=${x.d.toFixed(1)}，f=${x.f.toFixed(1)}`).join('；')||'没有完整数据'}${c.bessel.sum?`；平均 ${c.bessel.mean.toFixed(1)} mm，${Unc.line(c.bessel.sum,'f','mm')}`:''}。
-自准法：正向 ${c.auto.f1!=null?c.auto.f1.toFixed(1):'未测'} mm，反向 ${c.auto.f2!=null?c.auto.f2.toFixed(1):'未测'} mm${c.auto.mean!=null?`，平均 ${c.auto.mean.toFixed(1)} mm`:''}。
+${c.bessel.rep.length?`同一 D 重复测量的离散（方案验证）：${c.bessel.rep.map(r=>`D=${r.D} mm（${r.n} 次）s(x₁)=${r.sx1.toFixed(2)}，s(x₂)=${r.sx2.toFixed(2)}，s(f)=${r.sf.toFixed(2)} mm`).join('；')}。
+`:''}自准法：正向 ${c.auto.f1!=null?c.auto.f1.toFixed(1):'未测'} mm，反向 ${c.auto.f2!=null?c.auto.f2.toFixed(1):'未测'} mm${c.auto.mean!=null?`，平均 ${c.auto.mean.toFixed(1)} mm`:''}。
 系统记录：每次记录时透镜离真正最清晰位置的偏差（mm）：${s.rows.map(r=>`${r.t==='b'?`屏${r.xs}${r.big?'大像':'小像'}`:`自准${r.rev?'反向':'正向'}`}:${r.off}`).join('，')}。
 请给出批改意见：中文，250~350 字，分 4 段，每段开头依次写【总评】【数据问题】【误差来源】【改进建议】，段与段之间换行。比较两种方法的结果，解释为什么二次成像法不受透镜主面位置影响、自准法要正反各测一次。只根据给出的数据说话，语气像耐心的助教，不要使用 Markdown。`,
       offline:()=>offline(c)
     }).then(ok=>{ if (ok){ s.checked=true; s.review=ok; table(); render(); } });
+  }
+  /* 方案验证表：不同 D 下重复测量的离散程度 */
+  function repHtml(b){
+    const tip='验证“D 取多大最好”：选两三个物屏距离（例如约 4.3f、5f、7f，f 用你测得的平均值估计），每个距离<b>重复调焦 3 次</b>（大像、小像各记 3 次），比较同一 D 下读数和 f 的离散程度，以及两次清晰像是否容易分辨。';
+    if (!b.rep.length) return `<div class="hint">${tip}</div>`;
+    const fm=b.mean;
+    return `<div class="result">按物屏距离比较（同一 D 重复测量）
+      <table class="data"><tr><th>D / mm</th><th>D / f̄</th><th>次数</th><th>两像间距 d</th><th>s(x₁)</th><th>s(x₂)</th><th>f̄ / mm</th><th>s(f) / mm</th></tr>${b.rep.map(r=>`<tr><td>${r.D}</td><td>${(r.D/fm).toFixed(2)}</td><td>${r.n}</td><td>${r.d.toFixed(1)}</td><td>${r.sx1.toFixed(2)}</td><td>${r.sx2.toFixed(2)}</td><td>${r.f.toFixed(1)}</td><td>${r.sf.toFixed(2)}</td></tr>`).join('')}</table>
+      <div class="hint">${b.rep.length<2?'再换一个 D 重复测几次，才能比较。':'s(f) 小、两像又容易分辨的 D 更适合这台仪器。理论推出的 4.2f～5f 只是经验范围：太接近 4f 时两个像的位置几乎重合、清晰范围变宽，读数离散会变大，要用这张表来检验。'} s 为单次测量的标准偏差。</div></div>`;
   }
   /* 方案优化：二次成像法 D 取多大时 f 的不确定度最小 */
   const uR=Math.SQRT2*INST/Unc.SQRT3;
@@ -305,18 +321,17 @@ const LN = (() => {
     fields:[
       {k:'r1', label:'只考虑读数误差时，D 越接近几倍 f，u<sub>f</sub> 越小？', unit:'倍', answer:()=>4, tol:()=>0.1, hint:'看 t = f/D 取最大值 1/4 时'},
       {k:'r2', label:'只考虑读数误差，D 从 4.2f 增大到 8f，u<sub>f</sub> 变为原来的几倍？', unit:'倍', answer:()=>ufOf(8,1,false)/ufOf(4.2,1,false), tol:()=>0.06, hint:'分别代入 t = 1/4.2 和 t = 1/8'}],
-    reveal:()=>{ const f=s.f, r0=rMin(f); return `只看读数误差，D → 4f 时 u<sub>f</sub> → u/4 最小：此时 d 很小，而 ∂f/∂d = −d/(2D) 也很小，d 的误差几乎不影响 f；D 很大时 u<sub>f</sub> → u/√2。但 D 太接近 4f 时，大像、小像两个位置靠得太近，各自的“清晰范围”（透镜移动 Δ 时离焦量为 Δ·|m² − 1|，m 接近 1 时很不敏感）会重叠，分不清两次成像；按本仿真的透镜，D 至少约 ${r0.toFixed(2)}f。所以 D <b>略大于 4f</b>（约 4.2f～5f）最好。下图是两种模型下 u<sub>f</sub> 随 D/f 的变化，圆点是你在不同 D 下测得的 f 与平均值之差，可以在仿真里换几个 D 验证。`; },
-    draw:function dd(cv){ const f=s.f, rs=[...Array(120)].map((_,i)=>4.02+i*0.05), c=calc().bessel, mean=c.items.length?Unc.mean(c.items.map(x=>x.f)):null;
-      const curve=j=>rs.map(r=>[r,ufOf(r,f,j)]), pts=c.items.map(x=>[x.D/f, Math.abs(x.f-mean)]);
+    reveal:()=>{ const f=s.f, r0=rMin(f); return `只看读数误差，D → 4f 时 u<sub>f</sub> → u/4 最小：此时 d 很小，而 ∂f/∂d = −d/(2D) 也很小，d 的误差几乎不影响 f；D 很大时 u<sub>f</sub> → u/√2。但 D 太接近 4f 时，大像、小像两个位置靠得太近，各自的“清晰范围”（透镜移动 Δ 时离焦量为 Δ·|m² − 1|，m 接近 1 时很不敏感）会重叠，分不清两次成像；按本仿真的透镜，D 至少约 ${r0.toFixed(2)}f。所以理论上 D <b>略大于 4f</b>（约 4.2f～5f）较好。下图是两种模型下单次测量 u<sub>f</sub> 随 D/f 的变化。这只是<b>待验证的经验范围</b>：请在仿真里选几个 D、每个 D 重复调焦 3 次，结果区的“按物屏距离比较”会算出同一 D 下 f 的离散 s(f)，用它来检验，并考虑哪个 D 下两次清晰像最容易分辨。`; },
+    draw:function dd(cv){ const f=s.f, rs=[...Array(120)].map((_,i)=>4.02+i*0.05);
+      const curve=j=>rs.map(r=>[r,ufOf(r,f,j)]);
       if (!cv.clientWidth) return whenVisible(cv,()=>dd(cv));
       const {ctx,dpr,W,H}=setup(cv,190); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
-      const all=[...curve(false),...curve(true),...pts], ymax=Math.max(...all.map(p=>p[1]))*1.1, L=44, R=W-10, T=12, B=H-26, X=r=>L+(r-4)/(10-4)*(R-L), Y=v=>B-v/ymax*(B-T);
+      const all=[...curve(false),...curve(true)], ymax=Math.max(...all.map(p=>p[1]))*1.1, L=44, R=W-10, T=12, B=H-26, X=r=>L+(r-4)/(10-4)*(R-L), Y=v=>B-v/ymax*(B-T);
       ctx.strokeStyle='#ccc'; ctx.beginPath(); ctx.moveTo(L,T); ctx.lineTo(L,B); ctx.lineTo(R,B); ctx.stroke();
       ctx.fillStyle='#5b616a'; ctx.font='11px "PingFang SC","Microsoft YaHei UI","Noto Sans SC",sans-serif'; ctx.textAlign='center'; for (let r=4;r<=10;r++) ctx.fillText(r+'f',X(r),B+14);
       ctx.textAlign='right'; for (let k=0;k<=4;k++){ const v=ymax*k/4; ctx.fillText(v.toFixed(2),L-4,Y(v)+4); }
       [[false,'#4E4486','只计读数误差'],[true,'#d08a3c','再计入判断清晰的误差']].forEach(([j,c2,t],n)=>{ ctx.strokeStyle=c2; ctx.lineWidth=1.6; ctx.beginPath(); curve(j).forEach(([r,v],i)=>i?ctx.lineTo(X(r),Y(v)):ctx.moveTo(X(r),Y(v))); ctx.stroke(); ctx.fillStyle=c2; ctx.textAlign='left'; ctx.fillText(t,L+8,T+12+n*14); });
-      ctx.fillStyle='#1d1e21'; pts.forEach(([r,v])=>{ if (r<10){ ctx.beginPath(); ctx.arc(X(r),Y(v),3,0,Math.PI*2); ctx.fill(); } });
-      ctx.textAlign='left'; ctx.fillStyle='#5b616a'; ctx.fillText('纵轴：u_f / mm（圆点为 |f − f̄|）　横轴：D',L+8,H-2); }});
+      ctx.textAlign='left'; ctx.fillStyle='#5b616a'; ctx.fillText('纵轴：单次测量的 u_f / mm（理论）　横轴：D',L+8,H-2); }});
   typeof Learn!=='undefined' && Learn.task(P,{title:'透镜架读数指标的偏差', label:'偏差 δ', unit:'mm',
     text:'透镜架上的读数指标不一定正好在透镜主面处。<b>用你的数据</b>：由自准法正向、反向两次的焦距 f₁、f₂，算出读数指标与主面的偏差 δ = |f₂ − f₁|/2。',
     ready:()=>calc().auto.mean!=null, need:'先用自准法正向、反向各测一次。', hint:'正反两次的差值的一半。',
